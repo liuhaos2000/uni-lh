@@ -1,0 +1,7 @@
+{
+  "switch": false,
+  "radio": "r2",
+  "checkbox": ["c1", "c2"],
+  "slider": 25,
+  "input": "Mock数据测试"
+}

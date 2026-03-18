@@ -1,0 +1,116 @@
+{
+  "findSkList":[
+    {
+      "skId":"600001",
+      "skName":"萬科A",
+      "price":3.23,
+      "movement":2.01
+    },
+        {
+      "skId":"600002",
+      "skName":"萬科B",
+      "price":3.23,
+      "movement":-2.01
+    },
+        {
+      "skId":"600003",
+      "skName":"萬科C",
+      "price":3.23,
+      "movement":2.01
+    },        {
+      "skId":"600002",
+      "skName":"萬科B",
+      "price":3.23,
+      "movement":2.01
+    },
+        {
+      "skId":"600003",
+      "skName":"萬科C",
+      "price":3.23,
+      "movement":2.01
+    },        {
+      "skId":"600002",
+      "skName":"萬科B",
+      "price":3.23,
+      "movement":2.01
+    },
+        {
+      "skId":"600003",
+      "skName":"萬科C",
+      "price":3.23,
+      "movement":2.01
+    },        {
+      "skId":"600002",
+      "skName":"萬科B",
+      "price":3.23,
+      "movement":2.01
+    },
+        {
+      "skId":"600003",
+      "skName":"萬科C",
+      "price":3.23,
+      "movement":2.01
+    },        {
+      "skId":"600002",
+      "skName":"萬科B",
+      "price":3.23,
+      "movement":2.01
+    },
+        {
+      "skId":"600003",
+      "skName":"萬科C",
+      "price":3.23,
+      "movement":2.01
+    },        {
+      "skId":"600002",
+      "skName":"萬科B",
+      "price":3.23,
+      "movement":-2.01
+    },
+        {
+      "skId":"600003",
+      "skName":"萬科C",
+      "price":3.23,
+      "movement":2.01
+    },        {
+      "skId":"600002",
+      "skName":"萬科B",
+      "price":3.23,
+      "movement":2.01
+    },
+        {
+      "skId":"600003",
+      "skName":"萬科C",
+      "price":3.23,
+      "movement":2.01
+    },        {
+      "skId":"600002",
+      "skName":"萬科B",
+      "price":3.23,
+      "movement":2.01
+    },
+        {
+      "skId":"600003",
+      "skName":"萬科C",
+      "price":3.23,
+      "movement":2.01
+    },        {
+      "skId":"600002",
+      "skName":"萬科B",
+      "price":3.23,
+      "movement":2.01
+    },
+        {
+      "skId":"600003",
+      "skName":"萬科C",
+      "price":3.23,
+      "movement":2.01
+    },
+        {
+      "skId":"600004",
+      "skName":"萬科D",
+      "price":3.23,
+      "movement":2.01
+    }
+  ]
+}

@@ -1,0 +1,83 @@
+{
+  "code": 0,
+  "message": "success",
+  "data": {
+    "historyList":[
+      {
+        "buyDate":"2025/01/01",
+        "sellDate":"2025/01/01",
+        "warehousePosition":0.25,
+        "profitMargin":"0.0312"
+      },
+      {
+        "buyDate":"2025/02/01",
+        "sellDate":"2025/02/01",
+        "warehousePosition":0.35,
+        "profitMargin":"0.2326"
+      },
+      {
+        "buyDate":"2025/01/01",
+        "sellDate":"2025/01/01",
+        "warehousePosition":0.25,
+        "profitMargin":"0.0312"
+      },
+      {
+        "buyDate":"2025/02/01",
+        "sellDate":"2025/02/01",
+        "warehousePosition":0.35,
+        "profitMargin":"0.2326"
+      },
+          {
+        "buyDate":"2025/01/01",
+        "sellDate":"2025/01/01",
+        "warehousePosition":0.25,
+        "profitMargin":"0.0312"
+      },
+      {
+        "buyDate":"2025/02/01",
+        "sellDate":"2025/02/01",
+        "warehousePosition":0.35,
+        "profitMargin":"0.2326"
+      },
+      {
+        "buyDate":"2025/03/01",
+        "sellDate":"2025/03/01",
+        "warehousePosition":0.25,
+        "profitMargin":"0.1312"
+      }
+    ],
+    "markPoint": {
+      "data": [
+        {
+          "name": "Mark",
+          "coord": ["2013/5/31", 2300],
+          "value": 2300,
+          "itemStyle": {
+            "color": "rgb(41,60,85)"
+          },
+          "symbolSize": 60
+        },
+        {
+          "name": "highest value",
+          "type": "max",
+          "valueDim": "highest",
+          "symbolSize": 50
+        },
+        {
+          "name": "lowest value",
+          "type": "min",
+          "valueDim": "lowest",
+          "symbolSize": 10,
+          "symbol": "arrow"
+        },
+        {
+          "name": "average value on close",
+          "type": "average",
+          "valueDim": "close",
+          "symbolSize": 20,
+          "symbol": "diamond"
+        }
+      ]
+    }
+  }
+}

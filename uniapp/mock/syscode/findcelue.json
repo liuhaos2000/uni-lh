@@ -1,0 +1,10 @@
+{
+  "selectOptions": [
+    { "value": 1, "text": "策略1", "disable": false },
+    { "value": 2, "text": "策略2", "disable": false },
+    { "value": 3, "text": "策略3", "disable": false },
+    { "value": 4, "text": "策略4", "disable": false },
+    { "value": 5, "text": "策略5", "disable": false }
+  ]
+
+}

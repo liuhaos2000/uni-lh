@@ -1,0 +1,9 @@
+{
+  "selectOptions": [
+    { "value": 1, "text": "KDJ", "disable": false },
+    { "value": 2, "text": "BOLL", "disable": false },
+    { "value": 3, "text": "MACD", "disable": false },
+    { "value": 4, "text": "RSI", "disable": false },
+    { "value": 5, "text": "KD", "disable": false }
+  ]
+}
