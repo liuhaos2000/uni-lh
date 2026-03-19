@@ -6,6 +6,9 @@ class MovingAverageStrategy(StrategyBase):
     name = 'EMA13_EMA34_ATR'
     params = []
     level = 'normal'
+    # 该策略使用 EMA13 和 EMA34 交叉，主图显示这两条线
+    main_indicator = {"type": "EMA", "params": [13, 34]}
+    sub_indicator  = None
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)

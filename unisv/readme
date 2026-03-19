@@ -1,6 +1,10 @@
 ■ 环境
+windows:
 D:\99_wk\pythondev\myenv\Scripts\activate.bat
 
+mac:
+python3 -m venv venv
+source venv/bin/activate
 
 ■ 安装DB
 python manage.py makemigrations bkapp
@@ -14,7 +18,6 @@ pip install djangorestframework-simplejwt
 pip install redis django-redis
 pip install celery
 pip install akshare
-
 pip install django-cors-headers
 
 ■ 运行
@@ -30,11 +33,11 @@ redis-server
 ■API 
 https://momaapi.com/docs-shares.html
 历史数据
-http://api.momaapi.com/hsstock/history/000001.SZ/d/n/34E1BB45-2D59-4761-AB47-CEBC7A676A57?st=20240601&et=20251209&lt=300
+http://api.momaapi.com/hsstock/history/000001.SZ/d/n/token?st=20240601&et=20251209&lt=300
 实时数据
-http://api.momaapi.com/hsstock/real/time/000001/34E1BB45-2D59-4761-AB47-CEBC7A676A57
+http://api.momaapi.com/hsstock/real/time/000001/token
 
-http://api.momaapi.com/hsrl/ssjy_more/34E1BB45-2D59-4761-AB47-CEBC7A676A57?stock_codes=000001,000002
+http://api.momaapi.com/hsrl/ssjy_more/token?stock_codes=000001,000002
 
 
 

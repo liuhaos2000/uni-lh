@@ -8,7 +8,7 @@ export default {
   // API配置
   API: {
     // API基础URL
-    BASE_URL: 'http://localhost:8000/api',
+    BASE_URL: 'http://192.168.3.57:8000/api',
     
     // 超时时间（毫秒）
     TIMEOUT: 10000,

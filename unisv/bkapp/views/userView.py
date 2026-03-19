@@ -1,6 +1,7 @@
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework import status
+from django.conf import settings
 
 from ..models.watchlists import Watchlist
 from ..models.watchlist_stocks import WatchlistStock
@@ -92,7 +93,7 @@ def get_stocks_from_codes(stock_codes):
 
     stock_data = []
 
-    url = f"http://api.momaapi.com/hsrl/ssjy_more/34E1BB45-2D59-4761-AB47-CEBC7A676A57?stock_codes={codes}"; 
+    url = f"http://api.momaapi.com/hsrl/ssjy_more/{settings.MOMA_TOKEN}?stock_codes={codes}"; 
 
     response = requests.get(url)
 

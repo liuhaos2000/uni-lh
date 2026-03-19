@@ -6,6 +6,8 @@ class MovingAverageStrategy(StrategyBase):
     name = 'MA2'
     params = ['fast', 'slow']
     level = 'normal'
+    main_indicator = {"type": "MA", "params": [5, 10, 20, 30]}
+    sub_indicator  = None
     
     def __init__(self, **kwargs):
         super().__init__(**kwargs)

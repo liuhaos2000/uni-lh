@@ -1,0 +1,11 @@
+Django>=5.0
+djangorestframework
+djangorestframework-simplejwt
+redis
+django-redis
+celery
+django-cors-headers
+requests
+pandas
+numpy
+akshare

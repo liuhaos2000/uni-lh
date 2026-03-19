@@ -3,51 +3,45 @@
 		<view class="page">
 			<div id="sk-chart" class="chart-container"></div>
 		</view>
-		<view>
-			<uni-forms ref="form"  :modelValue="formData">
-				<view class="uni-list sk-div">
-					<view class="uni-list-cell">
-						<uni-section title="本地数据" type="line">
-							<view class="uni-px-5 uni-pb-5">
-								<uni-data-select v-model="selected" :localdata="dataList" @change="onDataSelectChange">
-									
-								</uni-data-select>
-							</view>
-						</uni-section>
-					</view>
-
-					<view class="button-group sk-btdiv">
-						<button class="sk-bt" type="primary" size="mini" @click="formSubmit">
-							RUN
-						</button>
-					</view>
-				</view>
-			</uni-forms>
+		<view class="strategy-bar">
+			<text class="strategy-label">策略：</text>
+			<uni-data-select class="strategy-select" placement="top" v-model="selected" :localdata="dataList" @change="onDataSelectChange" />
 		</view>
 
-		<view style="padding-bottom: 50px;">
-			<view class="uni-container">
-				<uni-table ref="table" :loading="loading" border stripe emptyText="暂无更多数据"
-					@selection-change="selectionChange">
-					<uni-tr>
-						<uni-th width="40" align="center">買入日</uni-th>
-						<uni-th width="40" align="center">価</uni-th>
-						<uni-th width="40" align="center">賣出日</uni-th>
-						<uni-th width="40" align="center">価</uni-th>
-						<uni-th width="20" align="center">倉位</uni-th>
-						<uni-th width="20" align="center">盈利</uni-th>
-					</uni-tr>
-					<uni-tr v-for="(item, index) in tableData" :key="index">
-						<uni-td>{{ item.buyDate }}</uni-td>
-						<uni-td>{{ item.buyPrice }}</uni-td>
-						<uni-td>{{ item.sellDate }}</uni-td>
-						<uni-td>{{ item.sellPrice }}</uni-td>
-						<uni-td align="right">{{ item.warehousePosition }}</uni-td>
-						<uni-td align="right">{{ item.profitMargin }}</uni-td>
-					</uni-tr>
-				</uni-table>
-
-			</view>
+		<view class="trade-list">
+			<view v-if="loading" class="trade-empty">加载中...</view>
+			<view v-else-if="!tableData || tableData.length === 0" class="trade-empty">暂无交易记录</view>
+			<template v-for="(item, index) in tableData" :key="index">
+				<!-- 最后一行：合计 -->
+				<view v-if="item.buyDate === ''" class="trade-summary">
+					<text class="trade-summary-label">合計収益</text>
+					<text :class="profitClass(item.profitMargin)" class="trade-summary-value">{{ formatProfit(item.profitMargin) }}</text>
+				</view>
+				<!-- 普通交易记录 -->
+				<view v-else class="trade-card">
+					<view class="trade-row">
+						<view class="trade-side">
+							<text class="trade-label">买入</text>
+							<text class="trade-date">{{ item.buyDate }}</text>
+							<text class="trade-price">{{ item.buyPrice }}</text>
+						</view>
+						<view class="trade-arrow">→</view>
+						<view class="trade-side">
+							<text class="trade-label">卖出</text>
+							<text class="trade-date">{{ item.sellDate || '持仓中' }}</text>
+							<text class="trade-price">{{ item.sellPrice || '-' }}</text>
+						</view>
+						<view class="trade-stat">
+							<text class="trade-label">仓位</text>
+							<text>{{ item.warehousePosition }}</text>
+						</view>
+						<view class="trade-stat">
+							<text class="trade-label">盈利</text>
+							<text :class="profitClass(item.profitMargin)">{{ formatProfit(item.profitMargin) }}</text>
+						</view>
+					</view>
+				</view>
+			</template>
 		</view>
 
 		<vive class="goods-carts goods-carts2">
@@ -201,7 +195,7 @@ export default {
 			const { initAndRender } = useSkLogic()
 			
 			try {
-				await initAndRender(SK_CONSTANTS.CHART_CONTAINER_ID,{skId: route.query.skId})
+				await initAndRender(SK_CONSTANTS.CHART_CONTAINER_ID, {skId: route.query.skId})
 				console.log('sk chart initialized')
 			} catch (e) {
 				console.error('Failed to initialize sk chart:', e)
@@ -243,19 +237,33 @@ export default {
 			window.removeEventListener('resize', resizeHandler)
 		})
 
+		function formatProfit(val) {
+			if (val === '' || val === null || val === undefined) return '-'
+			const n = parseFloat(val)
+			if (isNaN(n)) return val
+			return (n >= 0 ? '+' : '') + (n * 100).toFixed(2) + '%'
+		}
+
+		function profitClass(val) {
+			if (val === '' || val === null || val === undefined) return ''
+			const n = parseFloat(val)
+			if (isNaN(n)) return ''
+			return n >= 0 ? 'profit-up' : 'profit-down'
+		}
+
 		return {
 			bindPickerChange,
-			// uni-data-select mock data + selected
 			dataList,
 			selected,
 			onDataSelectChange,
-			// 表格相关的数据
 			loading,
 			tableData,
 			selectionChange,
 			formSubmit,
 			buttonGroup,
-			guanzhuList
+			guanzhuList,
+			formatProfit,
+			profitClass,
 		}
 	},
 
@@ -322,11 +330,10 @@ export default {
 	    try {
 	      const clickedText = e && e.content && e.content.text
 	      const secondText = this.buttonGroup && this.buttonGroup[1] && this.buttonGroup[1].text
-	      if (clickedText && secondText && clickedText === secondText) {
-	        // 转发到 onClick，保持原有行为（包含后端调用及 UI 更新）
+	      if (clickedText === '測試') {
+	        this.formSubmit()
+	      } else if (clickedText && secondText && clickedText === secondText) {
 	        this.onClick(e)
-	      } else {
-	        console.log('buttonClick ignored, clickedText:', clickedText)
 	      }
 	    } catch (err) {
 	      console.error('buttonClick handler error', err)
@@ -341,7 +348,7 @@ export default {
 .chart-container {
 	width: 100%;
 	height: 60vh;
-	/* fits full viewport height; adjust as needed */
+	touch-action: none; /* 让 ECharts 接管 touch 事件，支持手机捏合缩放 */
 }
 
 .page {
@@ -349,16 +356,24 @@ export default {
 	height: 100%;
 }
 
-.sk-div {
-	padding: 8px 8px 8px 8px;
+.strategy-bar {
+	margin-top: 8px;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 8px 12px;
+	background: #fff;
+	border-top: 1px solid #eee;
+	border-bottom: 1px solid #eee;
 }
-
-.sk-btdiv {
-	padding: 16px 0 8px 0;
+.strategy-label {
+	flex-shrink: 0;
+	font-size: 14px;
+	color: #555;
+	white-space: nowrap;
 }
-
-.sk-bt {
-	width: 100%;
+.strategy-select {
+	flex: 1;
 }
 
 .goods-carts {
@@ -379,5 +394,81 @@ export default {
 .goods-carts2 ::v-deep .uni-tab__cart-sub-left {
   padding:0 0;
 }
-  
+
+/* ── 交易记录卡片 ── */
+.trade-list {
+  padding: 8px;
+  padding-bottom: 60px;
+}
+.trade-empty {
+  text-align: center;
+  color: #999;
+  padding: 16px 0;
+  font-size: 13px;
+}
+.trade-card {
+  background: #fff;
+  border-radius: 6px;
+  margin-bottom: 6px;
+  padding: 8px 10px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+}
+.trade-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.trade-side {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: 2;
+}
+.trade-arrow {
+  color: #aaa;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+.trade-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: 1;
+}
+.trade-label {
+  font-size: 10px;
+  color: #aaa;
+  margin-bottom: 2px;
+}
+.trade-date {
+  font-size: 12px;
+  color: #333;
+}
+.trade-price {
+  font-size: 13px;
+  font-weight: 500;
+  color: #222;
+}
+.profit-up   { color: #ec0000; font-weight: bold; }
+.profit-down { color: #00aa44; font-weight: bold; }
+
+.trade-summary {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 10px 12px;
+  margin-top: 4px;
+  background: #f7f7f7;
+  border-radius: 6px;
+  border-top: 1px solid #eee;
+}
+.trade-summary-label {
+  font-size: 13px;
+  color: #666;
+  margin-bottom: 4px;
+}
+.trade-summary-value {
+  font-size: 18px;
+  font-weight: bold;
+}
 </style>

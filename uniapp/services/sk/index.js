@@ -11,7 +11,12 @@ export const getSkInitData = async (skId) => {
   }
 
   try {
-    const response = await uni.request({ url: `${API_URL}?skId=${skId}`, method: 'GET', timeout: ENV.API.TIMEOUT })
+    const response = await uni.request({
+      url: API_URL,
+      method: 'GET',
+      timeout: ENV.API.TIMEOUT,
+      data: { skId }
+    })
     return response.data
   } catch (error) {
     console.error('获取 sk 初始数据失败：', error)

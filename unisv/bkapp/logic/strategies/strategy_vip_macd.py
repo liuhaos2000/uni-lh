@@ -6,6 +6,8 @@ class RSIStrategy(StrategyBase):
     name = 'MACD'
     params = ['period', 'lower', 'upper']
     level = 'vip'
+    main_indicator = {"type": "MA", "params": [5, 20]}
+    sub_indicator  = {"type": "MACD", "params": {"fast": 12, "slow": 26, "signal": 9}}
     def __init__(self, period=14, lower=30, upper=70, **kwargs):
         super().__init__(period=period, lower=lower, upper=upper, **kwargs)
         self.period = int(period)

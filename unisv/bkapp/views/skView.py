@@ -4,24 +4,33 @@ from rest_framework import status
 
 from ..models.watchlists import Watchlist
 from ..models.watchlist_stocks import WatchlistStock
+from ..global_data import get_allskname_fromapi_global
+import pandas as pd
 import requests
 from datetime import datetime, timedelta
-from bkapp.logic.strategies.registry import get_strategy,get_strategy_by_value
+from django.conf import settings
+from bkapp.logic.strategies.registry import get_strategy, get_strategy_by_value
+from bkapp.logic.indicators.calculator import calculate_indicators
 
 @api_view(['GET'])
 def get_sk_k(request):
     try:
         skId = request.query_params.get('skId')
-        skName = request.query_params.get('skName')
 
         converted_data = fetch_and_convert_data(skId)
+
+        try:
+            allnames = get_allskname_fromapi_global()
+            skName = next((item['mc'] for item in allnames if item['dm'][:6] == skId[:6]), skId)
+        except Exception:
+            skName = skId
 
         return Response({
             "code": 0,
             "message": "success",
             "data": {
-                "title":f"{skName}（{skId}）",
-                "raw":converted_data
+                "title": f"{skName}（{skId}）",
+                "raw": converted_data
             }
         }, status=status.HTTP_200_OK)
     
@@ -35,20 +44,26 @@ def get_sk_k(request):
 @api_view(['GET'])
 def get_huice(request):
     try:
-        skId = request.query_params.get('skId')
+        skId    = request.query_params.get('skId')
         celueId = request.query_params.get('celueId')
-        
-        #获取历史数据
-        history = fetch_and_convert_data(skId)
 
-        strategy_class = get_strategy_by_value(celueId)
-        
+        strategy_class    = get_strategy_by_value(celueId)
 
-
+        # 获取历史 K 线数据（根据策略的 ktype 选日K或周K）
+        ktype   = getattr(strategy_class, 'ktype', 'd')
+        history = fetch_and_convert_data(skId, ktype)
         strategy_instance = strategy_class(skId=skId)
+        out_data          = strategy_instance.backtest(history)
 
-        out_data = strategy_instance.backtest(history)
-  
+        # 计算策略对应的主图/附图指标数据
+        df = pd.DataFrame(history, columns=["date", "open", "high", "low", "close", "volume"])
+        indicators = calculate_indicators(
+            df,
+            getattr(strategy_class, 'main_indicator', None),
+            getattr(strategy_class, 'sub_indicator',  None),
+        )
+        out_data['data']['indicators'] = indicators
+
         return Response(out_data)
 
     except Exception as e:
@@ -59,16 +74,21 @@ def get_huice(request):
 
 
 #获取历史数据
-def fetch_and_convert_data(skId):
+def fetch_and_convert_data(skId, ktype='d'):
     try:
         today = datetime.today()
         endDate = today.strftime('%Y%m%d')
-        one_year_ago = today - timedelta(days=365)
-        startDate = one_year_ago.strftime('%Y%m%d')
+        three_years_ago = today - timedelta(days=365 * 3)
+        startDate = three_years_ago.strftime('%Y%m%d')
 
-        url = f"http://api.momaapi.com/hsstock/history/{skId}/d/n/34E1BB45-2D59-4761-AB47-CEBC7A676A57?st={startDate}&et={endDate}&lt=300"
+        url = f"http://api.momaapi.com/hsstock/history/{skId}/{ktype}/n/{settings.MOMA_TOKEN}?st={startDate}&et={endDate}&lt=750"
         response = requests.get(url)
-        data = response.json()
+        try:
+            data = response.json()
+        except Exception:
+            raise Exception(f"行情数据接口异常：{response.text[:100]}")
+        if isinstance(data, str) or not isinstance(data, list):
+            raise Exception(f"行情数据接口返回错误：{str(data)[:100]}")
 
         converted_data = []
 
@@ -83,7 +103,8 @@ def fetch_and_convert_data(skId):
             close_price = item["c"]
             
             # 将数据添加到转换后的列表中
-            converted_data.append([date, open_price, high_price, low_price, close_price])
+            volume = item.get("v", 0)
+            converted_data.append([date, open_price, high_price, low_price, close_price, volume])
 
         return converted_data
 

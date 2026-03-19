@@ -10,6 +10,7 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
+import os
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -20,7 +21,9 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-1=4&mn^16-&ohu@wgo+s&l(2zri@qo1=gbfdl9mkayb#b@zbo='
+SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', 'django-insecure-fallback-key')
+
+MOMA_TOKEN = os.environ.get('MOMA_TOKEN', '')
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
@@ -147,7 +150,7 @@ AUTH_USER_MODEL = 'bkapp.User2'
 CACHES = {
     "default": {
         "BACKEND": "django_redis.cache.RedisCache",
-        "LOCATION": "redis://127.0.0.1:6379/1",
+        "LOCATION": "redis://redis:6379/1",
         "OPTIONS": {
             "CLIENT_CLASS": "django_redis.client.DefaultClient",
         }
@@ -155,8 +158,8 @@ CACHES = {
 }
 
 # Celery 
-CELERY_BROKER_URL = 'redis://localhost:6379/0'
-CELERY_RESULT_BACKEND = 'redis://localhost:6379/0'
+CELERY_BROKER_URL = 'redis://redis:6379/0'
+CELERY_RESULT_BACKEND = 'redis://redis:6379/0'
 CELERY_TIMEZONE = 'Asia/Shanghai'
 CELERY_ENABLE_UTC = False
 CELERY_BEAT_SCHEDULE = {
@@ -173,5 +176,5 @@ ALLOWED_HOSTS = [
     '8.137.119.6',  # 你的服务器 IP 地址
     'localhost',    # 本地开发环境
     '127.0.0.1',    # 本地开发环境
-    # 其他需要的主机名或 IP 地址
+    '192.168.3.57', # 局域网访问
 ]

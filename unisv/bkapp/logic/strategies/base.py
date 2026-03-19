@@ -6,6 +6,12 @@ class StrategyBase:
     name = 'base'
     params = []
     level = 'normal'  # 'normal' 或 'vip'
+    ktype = 'd'       # 'D' 日K / 'w' 周K
+
+    # 主图指标（叠加在 K 线上），None 表示使用前端默认 MA
+    main_indicator = {"type": "MA", "params": [5, 10, 20, 30]}
+    # 附图指标（K 线下方单独一块），None 表示不显示附图
+    sub_indicator = None
 
     def __init__(self, **kwargs):
         """
@@ -84,7 +90,7 @@ class StrategyBase:
 
     # ----------------- 回测方法 -----------------
     def backtest(self, history):
-        df = pd.DataFrame(history, columns=["date", "open", "high", "low", "close"])
+        df = pd.DataFrame(history, columns=["date", "open", "high", "low", "close", "volume"])
         df["date"] = pd.to_datetime(df["date"])
 
         self.prepare(df)
