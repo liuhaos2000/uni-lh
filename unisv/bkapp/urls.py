@@ -10,6 +10,7 @@ from .views.skView import get_sk_k
 from .views.skView import get_huice
 from .views.skView import addToWatchlist
 from .views.skView import removeFromWatchlist
+from .views.momentumView import momentum_backtest, momentum_optimize, etf_name_lookup
 
 urlpatterns = [
     #sk
@@ -23,6 +24,11 @@ urlpatterns = [
     #find
     path('find/strategies2/', list_strategies2),
     path('find/stock/', list_strategies2),
+
+    #momentum
+    path('momentum/backtest/', momentum_backtest),
+    path('momentum/optimize/', momentum_optimize),
+    path('momentum/etf-names/', etf_name_lookup),
 
     #mypage
     path('my/firststock/', get_user_first_stock),

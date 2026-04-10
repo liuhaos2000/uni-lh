@@ -30,6 +30,18 @@ http://127.0.0.1:8000/admin/
 
 redis-server
 
+
+■ docker运行
+# 重启所有服务
+docker compose restart
+
+# 或者只重启 Django 容器（更快）
+docker compose restart django
+
+# 如果改了 Dockerfile 或 依赖，需要重新构建
+docker compose up -d --build
+
+
 ■API 
 https://momaapi.com/docs-shares.html
 历史数据

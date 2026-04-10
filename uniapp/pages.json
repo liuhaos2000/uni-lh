@@ -33,6 +33,18 @@
 			"style": {
 				"navigationBarTitleText": ""
 			}
+		},
+		{
+			"path": "pages/strategy/list",
+			"style": {
+				"navigationBarTitleText": "策略"
+			}
+		},
+		{
+			"path": "pages/strategy/momentum",
+			"style": {
+				"navigationBarTitleText": "动量轮动回测"
+			}
 		}
 	],
 	"tabBar": {
@@ -50,6 +62,11 @@
 			"iconPath": "static/image/icon_API.png",
 			"selectedIconPath": "static/image/icon_API_HL.png",
 			"text": "查找"
+		},{
+			"pagePath": "pages/strategy/list",
+			"iconPath": "static/image/icon_API.png",
+			"selectedIconPath": "static/image/icon_API_HL.png",
+			"text": "策略"
 		},{
 			"pagePath": "pages/skmy/skmy",
 			"iconPath": "static/image/icon_API.png",
