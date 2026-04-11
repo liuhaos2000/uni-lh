@@ -8,6 +8,7 @@ import re
 from django.core.cache import cache
 
 from ..logic.momentum.rotation_backtest import run_rotation_backtest
+from ..models.momentum_watch import MomentumWatch
 
 
 def fetch_etf_names(codes):
@@ -270,6 +271,85 @@ def momentum_optimize(request):
     except Exception as e:
         return Response({"code": 500, "message": f"参数优化失败: {str(e)}"},
                         status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['GET', 'POST', 'DELETE'])
+def momentum_subscription(request):
+    """动量轮动信号订阅管理。
+
+    GET    ?user_id=1                  返回该用户的订阅
+    POST   body: {user_id, etf_codes, lookback_n, rebalance_days, initial_capital}
+    DELETE ?user_id=1                  取消订阅
+
+    TODO: 接入 JWT 后改为从 request.user 取用户。
+    """
+    from ..models.users2 import User2
+
+    # 暂时从请求里取 user_id，未接入 JWT 前与项目其它接口保持一致
+    if request.method == 'POST':
+        user_id = (request.data or {}).get('user_id') or 1
+    else:
+        user_id = request.query_params.get('user_id') or 1
+
+    try:
+        user = User2.objects.filter(id=int(user_id)).first()
+    except (TypeError, ValueError):
+        user = None
+
+    if not user:
+        return Response({"code": 400, "message": f"用户不存在: {user_id}"},
+                        status=status.HTTP_400_BAD_REQUEST)
+
+    if request.method == 'GET':
+        watch = MomentumWatch.objects.filter(user=user).first()
+        if not watch:
+            return Response({"code": 0, "data": {"subscribed": False}})
+        data = watch.to_dict()
+        data['subscribed'] = True
+        return Response({"code": 0, "data": data})
+
+    if request.method == 'DELETE':
+        MomentumWatch.objects.filter(user=user).delete()
+        return Response({"code": 0, "message": "已取消订阅"})
+
+    # POST: 创建或更新
+    payload = request.data or {}
+    etf_codes = payload.get('etf_codes') or []
+    if isinstance(etf_codes, str):
+        etf_codes = [c.strip() for c in etf_codes.split(',') if c.strip()]
+    if len(etf_codes) < 2:
+        return Response({"code": 400, "message": "至少需要2个ETF标的"},
+                        status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        lookback_n = int(payload.get('lookback_n', 25))
+        rebalance_days = int(payload.get('rebalance_days', 5))
+        initial_capital = float(payload.get('initial_capital', 1000000))
+    except (TypeError, ValueError):
+        return Response({"code": 400, "message": "参数格式错误"},
+                        status=status.HTTP_400_BAD_REQUEST)
+
+    if lookback_n < 1 or lookback_n > 60:
+        return Response({"code": 400, "message": "lookback_n 需在 1-60 之间"},
+                        status=status.HTTP_400_BAD_REQUEST)
+
+    watch, created = MomentumWatch.objects.update_or_create(
+        user=user,
+        defaults={
+            'etf_codes': etf_codes,
+            'lookback_n': lookback_n,
+            'rebalance_days': rebalance_days,
+            'initial_capital': initial_capital,
+            'enabled': True,
+        },
+    )
+    data = watch.to_dict()
+    data['subscribed'] = True
+    return Response({
+        "code": 0,
+        "message": "订阅成功" if created else "订阅已更新",
+        "data": data,
+    })
 
 
 @api_view(['GET'])

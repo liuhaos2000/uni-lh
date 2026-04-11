@@ -163,14 +163,28 @@
 				</view>
 			</view>
 		</view>
+
+		<!-- 底部订阅操作栏 -->
+		<view class="goods-carts goods-carts2">
+			<uni-goods-nav :options="navOptions" :buttonGroup="subBtnGroup" @buttonClick="onSubBtnClick" />
+		</view>
 	</view>
 </template>
 
 <script setup>
-import { ref, nextTick, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import getMomentumBacktest from '@/services/strategy/momentumBacktest.js'
 import getMomentumOptimize from '@/services/strategy/momentumOptimize.js'
 import etfNameLookup from '@/services/strategy/etfNameLookup.js'
+import {
+	getSubscription,
+	saveSubscription,
+	deleteSubscription,
+} from '@/services/strategy/momentumSubscription.js'
+import uniGoodsNav from '@dcloudio/uni-ui/lib/uni-goods-nav/uni-goods-nav.vue'
+
+// 本地存储 key
+const STORAGE_KEY = 'momentum_params'
 
 // 参数
 const etfList = ref([
@@ -187,6 +201,42 @@ const lookbackN = ref(25)
 const rebalanceDays = ref(5)
 const initialCapital = ref(1000000)
 const loading = ref(false)
+
+// 保存参数到本地
+const saveParams = () => {
+	try {
+		uni.setStorageSync(STORAGE_KEY, {
+			etfList: etfList.value.map(e => ({ code: e.code, name: e.name })),
+			startDate: startDate.value,
+			endDate: endDate.value,
+			lookbackN: lookbackN.value,
+			rebalanceDays: rebalanceDays.value,
+			initialCapital: initialCapital.value,
+		})
+	} catch (e) {
+		console.error('保存参数失败', e)
+	}
+}
+
+// 从本地恢复参数
+const loadParams = () => {
+	try {
+		const saved = uni.getStorageSync(STORAGE_KEY)
+		if (!saved) return false
+		if (Array.isArray(saved.etfList) && saved.etfList.length >= 2) {
+			etfList.value = saved.etfList.map(e => ({ code: e.code, name: e.name || '' }))
+		}
+		if (saved.startDate) startDate.value = saved.startDate
+		if (saved.endDate) endDate.value = saved.endDate
+		if (saved.lookbackN) lookbackN.value = saved.lookbackN
+		if (saved.rebalanceDays) rebalanceDays.value = saved.rebalanceDays
+		if (saved.initialCapital) initialCapital.value = saved.initialCapital
+		return true
+	} catch (e) {
+		console.error('读取参数失败', e)
+		return false
+	}
+}
 
 // 结果
 const hasResult = ref(false)
@@ -207,6 +257,24 @@ const hasOptResult = ref(false)
 const optBest = ref({})
 const optResults = ref([])
 
+// 订阅状态
+const subscribed = ref(false)
+const subscribing = ref(false)
+
+// 底部操作栏
+const navOptions = ref([])
+const subBtnGroup = computed(() => {
+	if (subscribed.value) {
+		return [
+			{ text: '取消订阅', backgroundColor: '#bbb', color: '#fff' },
+			{ text: '更新参数', backgroundColor: '#ffa200', color: '#fff' },
+		]
+	}
+	return [
+		{ text: '订阅每日飞书推送', backgroundColor: '#ffa200', color: '#fff' },
+	]
+})
+
 // 图表实例
 let momentumChart = null
 let equityChart = null
@@ -214,14 +282,84 @@ let optimizeChart = null
 
 const ETF_COLORS = ['#5470c6', '#91cc75', '#fac858', '#ee6666', '#73c0de', '#fc8452']
 
-// 页面加载时获取初始ETF名称
+// 页面加载时先恢复本地参数，再补全ETF名称
 onMounted(async () => {
-	const codes = etfList.value.map(e => e.code).join(',')
-	const names = await etfNameLookup(codes)
-	etfList.value.forEach(item => {
-		if (names[item.code]) item.name = names[item.code]
-	})
+	loadParams()
+	// 仅对缺名称的标的请求一次
+	const missingCodes = etfList.value.filter(e => !e.name).map(e => e.code)
+	if (missingCodes.length > 0) {
+		const names = await etfNameLookup(missingCodes.join(','))
+		etfList.value.forEach(item => {
+			if (!item.name && names[item.code]) item.name = names[item.code]
+		})
+	}
+	// 查询当前订阅状态
+	try {
+		const res = await getSubscription()
+		if (res && res.code === 0 && res.data && res.data.subscribed) {
+			subscribed.value = true
+		}
+	} catch (e) {
+		// 忽略
+	}
 })
+
+const doSubscribe = async () => {
+	if (subscribing.value) return
+	subscribing.value = true
+	try {
+		const res = await saveSubscription({
+			etf_codes: etfList.value.map(e => e.code),
+			lookback_n: Number(lookbackN.value),
+			rebalance_days: Number(rebalanceDays.value),
+			initial_capital: Number(initialCapital.value),
+		})
+		if (res && res.code === 0) {
+			subscribed.value = true
+			uni.showToast({ title: res.message || '订阅成功', icon: 'success' })
+		} else {
+			uni.showToast({ title: (res && res.message) || '订阅失败', icon: 'none' })
+		}
+	} catch (e) {
+		uni.showToast({ title: '订阅请求失败', icon: 'none' })
+	} finally {
+		subscribing.value = false
+	}
+}
+
+const doUnsubscribe = () => {
+	if (subscribing.value) return
+	uni.showModal({
+		title: '取消订阅',
+		content: '确定不再接收每日动量信号推送？',
+		success: async (r) => {
+			if (!r.confirm) return
+			subscribing.value = true
+			try {
+				const res = await deleteSubscription()
+				if (res && res.code === 0) {
+					subscribed.value = false
+					uni.showToast({ title: '已取消订阅', icon: 'success' })
+				}
+			} catch (e) {
+				uni.showToast({ title: '取消失败', icon: 'none' })
+			} finally {
+				subscribing.value = false
+			}
+		},
+	})
+}
+
+const onSubBtnClick = (e) => {
+	const text = e && e.content && e.content.text
+	if (!text) return
+	if (text === '取消订阅') {
+		doUnsubscribe()
+	} else {
+		// 订阅每日飞书推送 / 更新参数
+		doSubscribe()
+	}
+}
 
 const removeEtf = (index) => {
 	if (etfList.value.length <= 2) {
@@ -229,6 +367,7 @@ const removeEtf = (index) => {
 		return
 	}
 	etfList.value.splice(index, 1)
+	saveParams()
 }
 
 const addEtf = async () => {
@@ -249,6 +388,7 @@ const addEtf = async () => {
 		const name = names[code] || code
 		etfList.value.push({ code, name })
 		newEtfCode.value = ''
+		saveParams()
 	} finally {
 		nameLoading.value = false
 	}
@@ -256,10 +396,12 @@ const addEtf = async () => {
 
 const onStartDateChange = (e) => {
 	startDate.value = e.detail.value
+	saveParams()
 }
 
 const onEndDateChange = (e) => {
 	endDate.value = e.detail.value
+	saveParams()
 }
 
 const formatMoney = (val) => {
@@ -406,12 +548,14 @@ const applyBest = () => {
 	if (optBest.value) {
 		lookbackN.value = optBest.value.lookback_n
 		rebalanceDays.value = optBest.value.rebalance_days
+		saveParams()
 		uni.showToast({ title: '已应用最优参数', icon: 'success' })
 	}
 }
 
 async function runBacktest() {
 	loading.value = true
+	saveParams()
 	try {
 		// 日期格式转换: YYYY-MM-DD -> YYYY/MM/DD
 		const formattedStart = startDate.value.replace(/-/g, '/')
@@ -562,6 +706,7 @@ onBeforeUnmount(() => {
 <style>
 .uni-container {
 	padding: 12px;
+	padding-bottom: 70px;
 }
 
 .param-section {
@@ -689,6 +834,28 @@ onBeforeUnmount(() => {
 }
 
 .optimize-btn {
+	flex: 1;
+}
+
+.goods-carts {
+	display: flex;
+	flex-direction: column;
+	position: fixed;
+	left: 0;
+	right: 0;
+	/* #ifdef H5 */
+	left: var(--window-left);
+	right: var(--window-right);
+	/* #endif */
+	bottom: 0;
+	z-index: 99;
+}
+
+.goods-carts2 ::v-deep .uni-tab__cart-sub-left {
+	display: none;
+}
+
+.goods-carts2 ::v-deep .uni-tab__cart-sub-right {
 	flex: 1;
 }
 

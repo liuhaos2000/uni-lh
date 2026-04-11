@@ -1,5 +1,6 @@
 import numpy as np
 from .momentum_score import calculate_momentum_score
+from .decision import decide_signal
 
 
 def run_rotation_backtest(etf_history_dict, start_date, end_date=None,
@@ -65,6 +66,8 @@ def run_rotation_backtest(etf_history_dict, start_date, end_date=None,
     trade_records = []
 
     days_since_rebalance = rebalance_days  # 初始值设为调仓周期，确保第一天触发
+    last_signal = None       # 最后一个交易日的信号
+    last_scores = {}          # 最后一个交易日的评分
 
     for date in trade_dates:
         idx = date_to_idx[date]
@@ -89,67 +92,45 @@ def run_rotation_backtest(etf_history_dict, start_date, end_date=None,
 
         days_since_rebalance += 1
 
-        # 调仓判断
-        if days_since_rebalance >= rebalance_days and len(scores) > 0:
+        # 通过纯函数决策
+        signal = decide_signal(scores, holding_code, days_since_rebalance, rebalance_days)
+        last_signal = signal
+        last_scores = scores
+
+        if signal['is_rebalance_day']:
             days_since_rebalance = 0
+            action = signal['action']
+            target_code = signal['target_code']
 
-            # 找最高分
-            best_code = max(scores, key=lambda c: scores[c] if scores[c] is not None else float('-inf'))
-            best_score = scores.get(best_code)
+            # 卖出 / 换仓 都需要先平掉当前持仓
+            if action in ('sell', 'swap') and holding_code and holding_shares > 0:
+                sell_price = etf_close[holding_code][date]
+                sell_amount = holding_shares * sell_price
+                profit_rate = (sell_price - buy_price) / buy_price
+                trade_records.append({
+                    "buyDate": buy_date,
+                    "sellDate": date,
+                    "etfCode": holding_code,
+                    "buyPrice": round(buy_price, 4),
+                    "sellPrice": round(sell_price, 4),
+                    "shares": holding_shares,
+                    "profitRate": round(profit_rate, 4),
+                    "reason": signal['reason'],
+                })
+                capital = sell_amount
+                holding_code = None
+                holding_shares = 0
+                equity = capital
 
-            # 所有评分为负 → 空仓
-            all_negative = all(
-                (s is not None and s < 0) for s in scores.values()
-            )
-
-            if all_negative:
-                # 需要清仓
-                if holding_code and holding_shares > 0:
-                    sell_price = etf_close[holding_code][date]
-                    sell_amount = holding_shares * sell_price
-                    profit_rate = (sell_price - buy_price) / buy_price
-                    trade_records.append({
-                        "buyDate": buy_date,
-                        "sellDate": date,
-                        "etfCode": holding_code,
-                        "buyPrice": round(buy_price, 4),
-                        "sellPrice": round(sell_price, 4),
-                        "shares": holding_shares,
-                        "profitRate": round(profit_rate, 4),
-                        "reason": "全部负分空仓"
-                    })
-                    capital = sell_amount
-                    holding_code = None
-                    holding_shares = 0
-                    equity = capital
-            elif best_code != holding_code:
-                # 需要换仓
-                # 先卖出当前持仓
-                if holding_code and holding_shares > 0:
-                    sell_price = etf_close[holding_code][date]
-                    sell_amount = holding_shares * sell_price
-                    profit_rate = (sell_price - buy_price) / buy_price
-                    trade_records.append({
-                        "buyDate": buy_date,
-                        "sellDate": date,
-                        "etfCode": holding_code,
-                        "buyPrice": round(buy_price, 4),
-                        "sellPrice": round(sell_price, 4),
-                        "shares": holding_shares,
-                        "profitRate": round(profit_rate, 4),
-                        "reason": "调仓换股"
-                    })
-                    capital = sell_amount
-
-                # 买入最高分标的（用收盘价模拟）
-                buy_price = etf_close[best_code][date]
+            # 换仓 / 建仓 需要买入目标标的
+            if action in ('swap', 'buy') and target_code:
+                buy_price = etf_close[target_code][date]
                 holding_shares = int(capital / buy_price)
                 capital_used = holding_shares * buy_price
                 capital = capital - capital_used  # 剩余零头
-                holding_code = best_code
+                holding_code = target_code
                 buy_date = date
                 equity = holding_shares * buy_price + capital
-            # else: 最高分与当前持仓一致，不操作
 
         # 记录权益曲线
         equity_curve.append((date, round(equity, 2)))
@@ -198,6 +179,9 @@ def run_rotation_backtest(etf_history_dict, start_date, end_date=None,
         "trade_records": trade_records,
         "current_holding": current_holding,
         "summary": summary,
+        "latest_signal": last_signal,
+        "latest_scores": {k: (round(v, 6) if v is not None else None) for k, v in last_scores.items()},
+        "latest_date": trade_dates[-1] if trade_dates else None,
     }
 
 

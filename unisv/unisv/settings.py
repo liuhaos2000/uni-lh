@@ -162,11 +162,17 @@ CELERY_BROKER_URL = 'redis://redis:6379/0'
 CELERY_RESULT_BACKEND = 'redis://redis:6379/0'
 CELERY_TIMEZONE = 'Asia/Shanghai'
 CELERY_ENABLE_UTC = False
+from celery.schedules import crontab
+
 CELERY_BEAT_SCHEDULE = {
     "fetch_stock_spot_every_min": {
         "task": "bkapp.tasks.update_stock_data.update_stock_data",
         "schedule": 60,   # 每 60 秒執行一次
-    }
+    },
+    "momentum_daily_signal": {
+        "task": "bkapp.tasks.momentum_signal.run_momentum_signals",
+        "schedule": crontab(hour=9, minute=0, day_of_week="mon-fri"),
+    },
 }
 
 # CORS 设置
