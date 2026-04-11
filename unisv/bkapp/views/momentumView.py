@@ -234,8 +234,8 @@ def momentum_optimize(request):
         start_date = request.query_params.get('start_date', '2024/01/01')
         end_date = request.query_params.get('end_date', dt.today().strftime('%Y/%m/%d'))
         initial_capital = float(request.query_params.get('initial_capital', 1000000))
-        n_list_str = request.query_params.get('n_list', '10,15,20,25,30,40')
-        r_list_str = request.query_params.get('r_list', '3,5,7,10')
+        n_list_str = request.query_params.get('n_list', '20,21,22,23,24,25,26,27,28,29,30')
+        r_list_str = request.query_params.get('r_list', '1,2,3,4,5,6,7,8,9,10')
 
         n_list = [int(x.strip()) for x in n_list_str.split(',') if x.strip()]
         r_list = [int(x.strip()) for x in r_list_str.split(',') if x.strip()]

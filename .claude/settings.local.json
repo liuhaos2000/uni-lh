@@ -11,7 +11,8 @@
       "Bash(/Users/lh01/22_codex/uni-lh/unisv/venv/bin/python -c \"from PIL import Image; print\\('ok'\\)\")",
       "Bash(python -m py_compile bkapp/views/authView.py bkapp/utils/captcha.py bkapp/utils/email_code.py bkapp/logic/momentum/email_push.py bkapp/tasks/momentum_signal.py bkapp/migrations/0004_user2_email_unique.py)",
       "Bash(python -m py_compile bkapp/admin.py)",
-      "Bash(python -m py_compile bkapp/utils/email_code.py bkapp/logic/momentum/email_push.py bkapp/logic/momentum/feishu.py)"
+      "Bash(python -m py_compile bkapp/utils/email_code.py bkapp/logic/momentum/email_push.py bkapp/logic/momentum/feishu.py)",
+      "Bash(python -m py_compile bkapp/logic/momentum/decision.py)"
     ]
   }
 }
