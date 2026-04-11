@@ -1,4 +1,5 @@
-from rest_framework.decorators import api_view
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import status
 from django.conf import settings
@@ -9,6 +10,7 @@ import requests
 from ..global_data import get_allskname_fromapi_global
 
 @api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def get_user_first_stock(request):
     """Get all stock codes from the first watchlist of a user.
     
@@ -25,56 +27,53 @@ def get_user_first_stock(request):
             ]
         }
     """
-    #openid = request.query_params.get('openid')
-    openid = "111"
+    user = request.user
+    openid = str(user.id)
 
-    if not openid:
-        return Response({
-            "code": -1,
-            "message": "openid parameter is required"
-        }, status=status.HTTP_400_BAD_REQUEST)
-    
     try:
-        # Get the first watchlist for this openid
+        # 真实用户信息
+        user_info = {
+            "userName": user.nickname or user.username,
+            "userImage": user.headimg or "https://vkceyugu.cdn.bspapp.com/VKCEYUGU-dc-site/094a9dc0-50c0-11eb-b680-7980c8a877b8.jpg",
+            "userLevel": "VIP" if user.is_vip else "普通",
+            "userLevelTimeLimit": "—",
+            "is_vip": user.is_vip,
+            "backtest_count": user.backtest_count,
+            "backtest_quota": user.backtest_quota,
+        }
+
+        # 拿当前用户的 watchlist
         watchlist = Watchlist.objects.filter(openid=openid).first()
-        
+
         if not watchlist:
             return Response({
-                "code": 1,
-                "message": "No watchlist found for this openid",
-                "data": {}
-            }, status=status.HTTP_404_NOT_FOUND)
-        
-        # Get all stocks in this watchlist
+                "code": 0,
+                "message": "success",
+                "data": {**user_info, "userSkList": []}
+            }, status=status.HTTP_200_OK)
+
         stocks = WatchlistStock.objects.filter(watchlist=watchlist)
-        
+
         if not stocks.exists():
             return Response({
-                "code": 2,
-                "message": "No stocks found in this watchlist",
-                "data": {}
+                "code": 0,
+                "message": "success",
+                "data": {**user_info, "userSkList": []}
             }, status=status.HTTP_200_OK)
-        
-        # Build response data
+
         stocks_code = []
         for stock in stocks:
             stocks_code.append({
                 "stock_code": stock.stock_code,
                 "added_at": stock.added_at.isoformat() if stock.added_at else None
             })
-        
+
         stocks_data = get_stocks_from_codes(stocks_code)
-        
+
         return Response({
             "code": 0,
             "message": "success",
-            "data": {
-                "userName":"大郎1",
-	            "userImage":"https://vkceyugu.cdn.bspapp.com/VKCEYUGU-dc-site/094a9dc0-50c0-11eb-b680-7980c8a877b8.jpg",
-	            "userLevel":"0",
-	            "userLevelTimeLimit":"2026/12/30",
-                "userSkList":stocks_data
-            }
+            "data": {**user_info, "userSkList": stocks_data}
         }, status=status.HTTP_200_OK)
     
     except Exception as e:

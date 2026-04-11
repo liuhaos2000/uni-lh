@@ -1,7 +1,7 @@
 {
-    "name" : "test01",
+    "name" : "金点策略",
     "appid" : "",
-    "description" : "",
+    "description" : "金点策略 - 量化轮动信号",
     "versionName" : "1.0.0",
     "versionCode" : "100",
     "transformPx" : false,

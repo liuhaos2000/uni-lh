@@ -1,0 +1,96 @@
+/**
+ * 全局 uni.request 封装
+ *
+ * - 自动拼接 BASE_URL
+ * - 自动附带 Authorization: Bearer <token>
+ * - 401 自动清理本地 token 并跳转登录页
+ */
+import ENV from '@/config/env.js'
+
+const TOKEN_KEY = 'auth_access_token'
+const REFRESH_KEY = 'auth_refresh_token'
+const USER_KEY = 'auth_user'
+
+export const tokenStore = {
+  getAccess() {
+    try { return uni.getStorageSync(TOKEN_KEY) || '' } catch (e) { return '' }
+  },
+  getRefresh() {
+    try { return uni.getStorageSync(REFRESH_KEY) || '' } catch (e) { return '' }
+  },
+  getUser() {
+    try { return uni.getStorageSync(USER_KEY) || null } catch (e) { return null }
+  },
+  set({ access, refresh, user }) {
+    if (access !== undefined) uni.setStorageSync(TOKEN_KEY, access || '')
+    if (refresh !== undefined) uni.setStorageSync(REFRESH_KEY, refresh || '')
+    if (user !== undefined) uni.setStorageSync(USER_KEY, user || null)
+  },
+  clear() {
+    uni.removeStorageSync(TOKEN_KEY)
+    uni.removeStorageSync(REFRESH_KEY)
+    uni.removeStorageSync(USER_KEY)
+  },
+}
+
+let redirecting = false
+const redirectToLogin = () => {
+  if (redirecting) return
+  redirecting = true
+  tokenStore.clear()
+  setTimeout(() => { redirecting = false }, 1500)
+  uni.showToast({ title: '请先登录', icon: 'none' })
+  setTimeout(() => {
+    uni.navigateTo({ url: '/pages/auth/login' })
+  }, 300)
+}
+
+/**
+ * 发起请求
+ * @param {Object} options
+ * @param {string} options.url        相对路径或绝对 URL
+ * @param {string} [options.method]   GET/POST/...
+ * @param {Object} [options.data]     body / query
+ * @param {Object} [options.header]
+ * @param {boolean} [options.auth=true]   是否需要携带 token（默认是）
+ * @param {boolean} [options.silent=false] 401 时不跳转登录
+ */
+export function request(options) {
+  const {
+    url,
+    method = 'GET',
+    data,
+    header = {},
+    auth = true,
+    silent = false,
+    timeout = ENV.API.TIMEOUT,
+  } = options
+
+  const fullUrl = /^https?:\/\//.test(url) ? url : `${ENV.API.BASE_URL}${url}`
+  const finalHeader = { 'Content-Type': 'application/json', ...header }
+  if (auth) {
+    const token = tokenStore.getAccess()
+    if (token) finalHeader['Authorization'] = `Bearer ${token}`
+  }
+
+  return new Promise((resolve, reject) => {
+    uni.request({
+      url: fullUrl,
+      method,
+      data,
+      header: finalHeader,
+      timeout,
+      success: (res) => {
+        if (res.statusCode === 401) {
+          if (!silent) redirectToLogin()
+          reject({ code: 401, message: '未登录或登录已过期', res })
+          return
+        }
+        resolve(res.data)
+      },
+      fail: (err) => reject(err),
+    })
+  })
+}
+
+export default request

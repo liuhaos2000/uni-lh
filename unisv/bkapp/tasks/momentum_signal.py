@@ -9,11 +9,13 @@ import logging
 from datetime import datetime, date
 
 from celery import shared_task
+from django.conf import settings
 from django.utils import timezone
 
 from ..models.momentum_watch import MomentumWatch
 from ..logic.momentum.rotation_backtest import run_rotation_backtest
 from ..logic.momentum.feishu import send_feishu_card, build_signal_card
+from ..logic.momentum.email_push import send_signal_email
 from ..views.momentumView import fetch_etf_history, fetch_etf_names
 
 logger = logging.getLogger(__name__)
@@ -115,19 +117,43 @@ def push_one_signal(watch: MomentumWatch):
 
     user = watch.user
     username = getattr(user, 'nickname', None) or user.username
+    current_holding = result.get('current_holding')
+    summary = result.get('summary', {})
 
-    card = build_signal_card(
-        username=username,
-        signal_date=latest_date,
-        signal=latest_signal,
-        scores=latest_scores,
-        etf_names=etf_names,
-        current_holding=result.get('current_holding'),
-        summary=result.get('summary', {}),
+    channel = (getattr(settings, 'PUSH_CHANNEL', 'email') or 'email').lower()
+    action = latest_signal.get('action')
+
+    email_ok = feishu_ok = None
+
+    if channel in ('email', 'both'):
+        if user.email:
+            email_ok = send_signal_email(
+                user.email,
+                username=username,
+                signal_date=latest_date,
+                signal=latest_signal,
+                scores=latest_scores,
+                etf_names=etf_names,
+                current_holding=current_holding,
+                summary=summary,
+            )
+        else:
+            logger.warning(f'watch={watch.id} ({username}) 用户未设置邮箱，跳过邮件')
+            email_ok = False
+
+    if channel in ('feishu', 'both'):
+        card = build_signal_card(
+            username=username,
+            signal_date=latest_date,
+            signal=latest_signal,
+            scores=latest_scores,
+            etf_names=etf_names,
+            current_holding=current_holding,
+            summary=summary,
+        )
+        feishu_ok = send_feishu_card(card)
+
+    logger.info(
+        f'watch={watch.id} ({username}) action={action} channel={channel} '
+        f'email={email_ok} feishu={feishu_ok}'
     )
-
-    ok = send_feishu_card(card)
-    if ok:
-        logger.info(f'watch={watch.id} ({username}) 推送成功 action={latest_signal["action"]}')
-    else:
-        logger.error(f'watch={watch.id} ({username}) 飞书发送失败')

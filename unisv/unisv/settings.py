@@ -50,13 +50,22 @@ INSTALLED_APPS = [
 ]
 
 # new
-REST_FRAMEWORK = { 
+REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': [
-        'rest_framework.permissions.AllowAny', 
+        'rest_framework.permissions.AllowAny',
     ],
         'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework_simplejwt.authentication.JWTAuthentication',
     ),
+}
+
+# JWT 生命周期（独立网页场景放宽到 1 天 / 30 天）
+from datetime import timedelta
+SIMPLE_JWT = {
+    'ACCESS_TOKEN_LIFETIME': timedelta(days=1),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=30),
+    'ROTATE_REFRESH_TOKENS': False,
+    'AUTH_HEADER_TYPES': ('Bearer',),
 }
 
 MIDDLEWARE = [
@@ -184,3 +193,26 @@ ALLOWED_HOSTS = [
     '127.0.0.1',    # 本地开发环境
     '192.168.3.57', # 局域网访问
 ]
+
+# ---------------------------------------------------------------------------
+# 邮件（QQ SMTP）
+# 发件邮箱地址通过环境变量 EMAIL_HOST_USER 注入；授权码已固化在下方常量。
+# ---------------------------------------------------------------------------
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = 'smtp.qq.com'
+EMAIL_PORT = 465
+EMAIL_USE_SSL = True
+EMAIL_USE_TLS = False
+EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', '')  # 例如 xxxxx@qq.com
+EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', 'cdaqbjygckqsbgii')
+DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', EMAIL_HOST_USER or 'noreply@example.com')
+EMAIL_TIMEOUT = 15
+
+# 产品品牌名（出现在邮件标题、抬头等用户可见位置）
+BRAND_NAME = os.environ.get('BRAND_NAME', '金点策略')
+
+# 推送通道：email | feishu | both
+PUSH_CHANNEL = os.environ.get('PUSH_CHANNEL', 'email')
+
+# 飞书 webhook 备选
+FEISHU_WEBHOOK_URL = os.environ.get('FEISHU_WEBHOOK_URL', '')

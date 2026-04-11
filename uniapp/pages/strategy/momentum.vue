@@ -181,6 +181,8 @@ import {
 	saveSubscription,
 	deleteSubscription,
 } from '@/services/strategy/momentumSubscription.js'
+import userStore from '@/stores/user.js'
+import { handleVipBlocked } from '@/utils/vipTip.js'
 import uniGoodsNav from '@dcloudio/uni-ui/lib/uni-goods-nav/uni-goods-nav.vue'
 
 // 本地存储 key
@@ -293,19 +295,37 @@ onMounted(async () => {
 			if (!item.name && names[item.code]) item.name = names[item.code]
 		})
 	}
-	// 查询当前订阅状态
-	try {
-		const res = await getSubscription()
-		if (res && res.code === 0 && res.data && res.data.subscribed) {
-			subscribed.value = true
+	// 未登录时跳过订阅状态查询
+	if (userStore.isLoggedIn.value) {
+		try {
+			const res = await getSubscription()
+			if (res && res.code === 0 && res.data && res.data.subscribed) {
+				subscribed.value = true
+			}
+		} catch (e) {
+			// 忽略
 		}
-	} catch (e) {
-		// 忽略
 	}
 })
 
+const requireLogin = () => {
+	if (userStore.isLoggedIn.value) return true
+	uni.showModal({
+		title: '需要登录',
+		content: '订阅每日推送需要先登录，是否前往登录？',
+		confirmText: '去登录',
+		success: (r) => {
+			if (r.confirm) {
+				uni.navigateTo({ url: '/pages/auth/login' })
+			}
+		},
+	})
+	return false
+}
+
 const doSubscribe = async () => {
 	if (subscribing.value) return
+	if (!requireLogin()) return
 	subscribing.value = true
 	try {
 		const res = await saveSubscription({
@@ -314,6 +334,8 @@ const doSubscribe = async () => {
 			rebalance_days: Number(rebalanceDays.value),
 			initial_capital: Number(initialCapital.value),
 		})
+		// VIP 拦截
+		if (handleVipBlocked(res)) return
 		if (res && res.code === 0) {
 			subscribed.value = true
 			uni.showToast({ title: res.message || '订阅成功', icon: 'success' })
@@ -329,6 +351,7 @@ const doSubscribe = async () => {
 
 const doUnsubscribe = () => {
 	if (subscribing.value) return
+	if (!requireLogin()) return
 	uni.showModal({
 		title: '取消订阅',
 		content: '确定不再接收每日动量信号推送？',
@@ -434,6 +457,7 @@ async function loadEcharts() {
 }
 
 async function runOptimize() {
+	if (!requireLogin()) return
 	optimizing.value = true
 	try {
 		const formattedStart = startDate.value.replace(/-/g, '/')
@@ -445,6 +469,9 @@ async function runOptimize() {
 			end_date: formattedEnd,
 			initial_capital: initialCapital.value,
 		})
+
+		// VIP 配额拦截
+		if (handleVipBlocked(res)) return
 
 		if (res.code !== 0) {
 			uni.showToast({ title: res.message || '优化失败', icon: 'none' })
@@ -554,6 +581,7 @@ const applyBest = () => {
 }
 
 async function runBacktest() {
+	if (!requireLogin()) return
 	loading.value = true
 	saveParams()
 	try {
@@ -569,6 +597,9 @@ async function runBacktest() {
 			rebalance_days: rebalanceDays.value,
 			initial_capital: initialCapital.value,
 		})
+
+		// VIP 配额拦截
+		if (handleVipBlocked(res)) return
 
 		if (res.code !== 0) {
 			uni.showToast({ title: res.message || '回测失败', icon: 'none' })

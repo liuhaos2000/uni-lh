@@ -6,6 +6,7 @@ from .models import (
     User, Watchlist, WatchlistStock
 )
 from .models.users2 import User2
+from .models.momentum_watch import MomentumWatch
 
 
 @admin.register(Todo)
@@ -96,14 +97,32 @@ class WatchlistStockAdmin(admin.ModelAdmin):
 
 @admin.register(User2)
 class User2Admin(admin.ModelAdmin):
-    list_display = ('id', 'username', 'email', 'phone', 'nickname', 'is_vip', 'is_active')
+    list_display = (
+        'id', 'username', 'email', 'phone', 'nickname',
+        'is_vip', 'backtest_count', 'backtest_quota', 'is_active', 'date_joined',
+    )
     search_fields = ('username', 'email', 'phone', 'nickname', 'openid')
     list_filter = ('is_vip', 'is_active', 'date_joined')
+    list_editable = ('is_vip', 'backtest_quota')
     readonly_fields = ('date_joined', 'last_login')
     fieldsets = (
         (None, {'fields': ('username', 'password')}),
         ('Personal info', {'fields': ('first_name', 'last_name', 'email', 'phone', 'nickname')}),
         ('Third-party info', {'fields': ('openid', 'headimg')}),
-        ('Permissions', {'fields': ('is_active', 'is_staff', 'is_superuser', 'is_vip', 'groups', 'user_permissions')}),
+        ('VIP & 配额', {'fields': ('is_vip', 'backtest_count', 'backtest_quota')}),
+        ('Permissions', {'fields': ('is_active', 'is_staff', 'is_superuser', 'groups', 'user_permissions')}),
         ('Important dates', {'fields': ('last_login', 'date_joined')}),
     )
+
+
+@admin.register(MomentumWatch)
+class MomentumWatchAdmin(admin.ModelAdmin):
+    list_display = (
+        'id', 'user', 'etf_codes', 'lookback_n', 'rebalance_days',
+        'initial_capital', 'enabled', 'updated_at',
+    )
+    list_filter = ('enabled', 'created_at')
+    search_fields = ('user__username', 'user__email')
+    list_editable = ('enabled',)
+    autocomplete_fields = ('user',)
+    readonly_fields = ('created_at', 'updated_at')

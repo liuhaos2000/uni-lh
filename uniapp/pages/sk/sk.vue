@@ -66,6 +66,8 @@ import { addToWatchlist, removeFromWatchlist } from '@/services/sk/watchlist.js'
 import { useRoute } from 'vue-router';
 import uniIcons from '@dcloudio/uni-ui/lib/uni-icons/uni-icons.vue';
 import uniGoodsNav from '@dcloudio/uni-ui/lib/uni-goods-nav/uni-goods-nav.vue';
+import userStore from '@/stores/user.js'
+import { handleVipBlocked } from '@/utils/vipTip.js'
 
 
 export default {
@@ -116,6 +118,12 @@ export default {
 				loading.value = true
 				const r = await getHuiceData(route.query.skId, selected.value)
 				console.log('getHuiceData:', r); // 调试输出
+				// VIP 配额拦截
+				if (handleVipBlocked(r)) return
+				if (!r || r.code !== 0 || !r.data) {
+					uni.showToast({ title: (r && r.message) || '加载失败', icon: 'none' })
+					return
+				}
 				tableData.value = r.data.historyList
 
 				// mack数据更新
@@ -128,6 +136,20 @@ export default {
 			} finally {
 				loading.value = false
 			}
+		}
+
+		// 登录守卫
+		const requireLogin = () => {
+			if (userStore.isLoggedIn.value) return true
+			uni.showModal({
+				title: '需要登录',
+				content: '请先登录后再使用',
+				confirmText: '去登录',
+				success: (r) => {
+					if (r.confirm) uni.navigateTo({ url: '/pages/auth/login' })
+				},
+			})
+			return false
 		}
 
 		// 表格相关的方法
@@ -264,6 +286,7 @@ export default {
 			guanzhuList,
 			formatProfit,
 			profitClass,
+			requireLogin,
 		}
 	},
 
@@ -326,7 +349,8 @@ export default {
 	  },
 	  buttonClick (e) {
 	    console.log('buttonClick event:', e)
-	    // 只有当点击的按钮文本等于第二个按钮（加入/取消自選）时，才触发 onClick 处理逻辑
+	    // 所有按钮操作都需要登录
+	    if (!this.requireLogin()) return
 	    try {
 	      const clickedText = e && e.content && e.content.text
 	      const secondText = this.buttonGroup && this.buttonGroup[1] && this.buttonGroup[1].text

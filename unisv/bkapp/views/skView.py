@@ -1,10 +1,12 @@
-from rest_framework.decorators import api_view
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import status
 
 from ..models.watchlists import Watchlist
 from ..models.watchlist_stocks import WatchlistStock
 from ..global_data import get_allskname_fromapi_global
+from ..utils.usage import check_and_inc_backtest, QuotaExceeded, VIP_INFO
 import pandas as pd
 import requests
 from datetime import datetime, timedelta
@@ -42,8 +44,19 @@ def get_sk_k(request):
 
 
 @api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def get_huice(request):
     try:
+        # 非 VIP 配额检查
+        try:
+            check_and_inc_backtest(request.user)
+        except QuotaExceeded as qe:
+            return Response({
+                "code": 4001,
+                "message": str(qe),
+                "vip_info": VIP_INFO,
+            }, status=status.HTTP_403_FORBIDDEN)
+
         skId    = request.query_params.get('skId')
         celueId = request.query_params.get('celueId')
 
@@ -114,6 +127,7 @@ def fetch_and_convert_data(skId, ktype='d'):
 
 
 @api_view(['POST'])
+@permission_classes([IsAuthenticated])
 def addToWatchlist(request):
     try:
         # 支持从 POST body 或 query params 获取参数
@@ -121,7 +135,7 @@ def addToWatchlist(request):
         if not skId:
             skId = request.query_params.get('stock_code')
 
-        openid = "111"
+        openid = str(request.user.id)
 
         if not skId:
             return Response({"code": 400, "message": "stock_code is required"}, status=status.HTTP_400_BAD_REQUEST)
@@ -144,13 +158,14 @@ def addToWatchlist(request):
         return Response({"code": 500, "message": f"Error: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 @api_view(['POST'])
+@permission_classes([IsAuthenticated])
 def removeFromWatchlist(request):
     try:
         skId = request.data.get('stock_code') if hasattr(request, 'data') else None
         if not skId:
             skId = request.query_params.get('stock_code')
 
-        openid = "111"
+        openid = str(request.user.id)
 
         if not skId:
             return Response({"code": 400, "message": "stock_code is required"}, status=status.HTTP_400_BAD_REQUEST)

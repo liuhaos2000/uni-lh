@@ -3,7 +3,7 @@
 		{
 			"path": "pages/index/index",
 			"style": {
-				"navigationBarTitleText": "uni-app"
+				"navigationBarTitleText": "金点策略"
 			}
 		},
 		{
@@ -15,7 +15,7 @@
 		{
 			"path": "pages/sk/sk",
 			"style": {
-				"navigationBarTitleText": "詳細",
+				"navigationBarTitleText": "股票详情",
 				"app-plus": {
 					"animationType": "slide-out-right",
 					"animationDuration": 300
@@ -31,7 +31,7 @@
 		{
 			"path": "pages/skmy/skmy",
 			"style": {
-				"navigationBarTitleText": ""
+				"navigationBarTitleText": "我的"
 			}
 		},
 		{
@@ -43,7 +43,25 @@
 		{
 			"path": "pages/strategy/momentum",
 			"style": {
-				"navigationBarTitleText": "动量轮动回测"
+				"navigationBarTitleText": "金点策略 · 动量轮动"
+			}
+		},
+		{
+			"path": "pages/auth/login",
+			"style": {
+				"navigationBarTitleText": "登录"
+			}
+		},
+		{
+			"path": "pages/auth/register",
+			"style": {
+				"navigationBarTitleText": "注册"
+			}
+		},
+		{
+			"path": "pages/auth/forgot",
+			"style": {
+				"navigationBarTitleText": "找回密码"
 			}
 		}
 	],
@@ -56,7 +74,7 @@
 			"pagePath": "pages/index/index",
 			"iconPath": "static/image/icon_component.png",
 			"selectedIconPath": "static/image/icon_component_HL.png",
-			"text": "首頁"
+			"text": "首页"
 		}, {
 			"pagePath": "pages/skfind/skfind",
 			"iconPath": "static/image/icon_API.png",
@@ -76,7 +94,7 @@
 	},
 	"globalStyle": {
 		"navigationBarTextStyle": "black",
-		"navigationBarTitleText": "uni-app",
+		"navigationBarTitleText": "金点策略",
 		"navigationBarBackgroundColor": "#94bcff",
 		"backgroundColor": "#F8F8F8"
 	},

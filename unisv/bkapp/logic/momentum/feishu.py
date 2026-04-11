@@ -2,6 +2,7 @@
 import os
 import logging
 import requests
+from django.conf import settings
 
 logger = logging.getLogger(__name__)
 
@@ -140,7 +141,8 @@ def build_signal_card(username, signal_date, signal, scores, etf_names,
         f"标的池：{etf_labels}"
     )
 
-    title = f"{_ACTION_EMOJI.get(action, '📈')} 动量轮动信号 · {_ACTION_TEXT.get(action, '')}"
+    brand = getattr(settings, 'BRAND_NAME', '金点策略')
+    title = f"{_ACTION_EMOJI.get(action, '📈')} {brand} · 动量轮动 · {_ACTION_TEXT.get(action, '')}"
 
     card = {
         'config': {'wide_screen_mode': True},

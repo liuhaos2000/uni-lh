@@ -1,4 +1,5 @@
-from rest_framework.decorators import api_view
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import status
 
@@ -9,6 +10,10 @@ from django.core.cache import cache
 
 from ..logic.momentum.rotation_backtest import run_rotation_backtest
 from ..models.momentum_watch import MomentumWatch
+from ..utils.usage import (
+    check_and_inc_backtest, require_vip,
+    QuotaExceeded, VipRequired, VIP_INFO,
+)
 
 
 def fetch_etf_names(codes):
@@ -115,6 +120,7 @@ def fetch_etf_history(code):
 
 
 @api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def momentum_backtest(request):
     """动量轮动回测接口。
 
@@ -125,6 +131,16 @@ def momentum_backtest(request):
         rebalance_days: 调仓周期（交易日），默认5
         initial_capital: 初始资金，默认1000000
     """
+    # 非 VIP 配额检查
+    try:
+        check_and_inc_backtest(request.user)
+    except QuotaExceeded as qe:
+        return Response({
+            "code": 4001,
+            "message": str(qe),
+            "vip_info": VIP_INFO,
+        }, status=status.HTTP_403_FORBIDDEN)
+
     try:
         from datetime import datetime as dt
         codes_str = request.query_params.get('codes', '518880,513100,510300,159915')
@@ -190,6 +206,7 @@ def momentum_backtest(request):
 
 
 @api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def momentum_optimize(request):
     """参数优化：遍历 lookback_n 和 rebalance_days 组合，返回各组合的夏普比率和收益率。
 
@@ -201,6 +218,16 @@ def momentum_optimize(request):
         n_list: 回看天数列表，逗号分隔，默认 '10,15,20,25,30,40'
         r_list: 调仓周期列表，逗号分隔，默认 '3,5,7,10'
     """
+    # 非 VIP 配额检查（参数优化和回测共用一个 quota）
+    try:
+        check_and_inc_backtest(request.user)
+    except QuotaExceeded as qe:
+        return Response({
+            "code": 4001,
+            "message": str(qe),
+            "vip_info": VIP_INFO,
+        }, status=status.HTTP_403_FORBIDDEN)
+
     try:
         from datetime import datetime as dt
         codes_str = request.query_params.get('codes', '518880,513100,510300,159915')
@@ -274,31 +301,15 @@ def momentum_optimize(request):
 
 
 @api_view(['GET', 'POST', 'DELETE'])
+@permission_classes([IsAuthenticated])
 def momentum_subscription(request):
-    """动量轮动信号订阅管理。
+    """动量轮动信号订阅管理（需要登录）。
 
-    GET    ?user_id=1                  返回该用户的订阅
-    POST   body: {user_id, etf_codes, lookback_n, rebalance_days, initial_capital}
-    DELETE ?user_id=1                  取消订阅
-
-    TODO: 接入 JWT 后改为从 request.user 取用户。
+    GET    返回当前用户的订阅
+    POST   body: {etf_codes, lookback_n, rebalance_days, initial_capital}
+    DELETE 取消订阅
     """
-    from ..models.users2 import User2
-
-    # 暂时从请求里取 user_id，未接入 JWT 前与项目其它接口保持一致
-    if request.method == 'POST':
-        user_id = (request.data or {}).get('user_id') or 1
-    else:
-        user_id = request.query_params.get('user_id') or 1
-
-    try:
-        user = User2.objects.filter(id=int(user_id)).first()
-    except (TypeError, ValueError):
-        user = None
-
-    if not user:
-        return Response({"code": 400, "message": f"用户不存在: {user_id}"},
-                        status=status.HTTP_400_BAD_REQUEST)
+    user = request.user
 
     if request.method == 'GET':
         watch = MomentumWatch.objects.filter(user=user).first()
@@ -312,7 +323,16 @@ def momentum_subscription(request):
         MomentumWatch.objects.filter(user=user).delete()
         return Response({"code": 0, "message": "已取消订阅"})
 
-    # POST: 创建或更新
+    # POST: 创建或更新（仅 VIP 可订阅）
+    try:
+        require_vip(user)
+    except VipRequired as ve:
+        return Response({
+            "code": 4002,
+            "message": str(ve),
+            "vip_info": VIP_INFO,
+        }, status=status.HTTP_403_FORBIDDEN)
+
     payload = request.data or {}
     etf_codes = payload.get('etf_codes') or []
     if isinstance(etf_codes, str):
