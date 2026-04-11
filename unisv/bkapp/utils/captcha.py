@@ -46,6 +46,7 @@ def _gen_image(text: str) -> bytes:
             font = ImageFont.truetype('Arial.ttf', font_size)
         except (OSError, IOError):
             font = ImageFont.load_default()
+            
 
     # 干扰点
     for _ in range(120):
