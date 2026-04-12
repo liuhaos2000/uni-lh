@@ -43,6 +43,11 @@
 				<text class="param-label">初始资金</text>
 				<input class="param-input" type="number" v-model="initialCapital" />
 			</view>
+			<view class="param-row opt-extra-row">
+				<text class="param-label">样本外验证</text>
+				<switch :checked="enableOos" @change="onOosChange" color="#ffa200" style="transform:scale(0.8);" />
+				<text class="opt-extra-hint">留最后 30% 数据做验证</text>
+			</view>
 			<view class="btn-row">
 				<button class="run-btn" type="primary" size="mini" @click="runBacktest" :loading="loading">
 					开始回测
@@ -56,17 +61,120 @@
 		<!-- 参数优化结果 -->
 		<view v-if="hasOptResult" class="result-section">
 			<view class="chart-section">
-				<text class="section-title">参数优化结果</text>
-				<view class="opt-best">
-					<text class="opt-best-label">最优组合：</text>
-					<text class="opt-best-value">回看 {{ optBest.lookback_n }} 天 / 调仓 {{ optBest.rebalance_days }} 天</text>
-					<text class="opt-best-sharpe">夏普 {{ optBest.sharpe_ratio }}</text>
-					<text class="opt-best-return" :class="optBest.total_return >= 0 ? 'profit-up' : 'profit-down'">
-						收益 {{ (optBest.total_return * 100).toFixed(2) }}%
-					</text>
+				<view class="section-title-row" @click="optSectionOpen = !optSectionOpen">
+					<text class="section-title">参数优化结果</text>
+					<text class="fold-icon">{{ optSectionOpen ? '▼' : '▶' }}</text>
 				</view>
-				<button class="apply-btn" type="warn" size="mini" @click="applyBest">应用最优参数</button>
+
+				<view v-show="optSectionOpen">
+				<!-- 三张 best 卡片 -->
+				<view class="best-cards">
+					<view class="best-card best-card-sharpe" @click="selectByBest('sharpe')">
+						<view class="best-card-head">
+							<text class="best-card-title">🏆 夏普最高</text>
+							<text v-if="optBestSharpe && optBestSharpe.robust === false" class="best-warn">⚠ 过拟合风险</text>
+						</view>
+						<text class="best-card-param" v-if="optBestSharpe">n={{ optBestSharpe.lookback_n }}  r={{ optBestSharpe.rebalance_days }}</text>
+						<view v-if="optBestSharpe" class="best-card-metrics">
+							<view class="best-metric"><text class="m-label">Sharpe</text><text class="m-val">{{ fmt(optBestSharpe.sharpe_ratio) }}</text></view>
+							<view class="best-metric"><text class="m-label">收益</text><text class="m-val" :class="profitClass(optBestSharpe.total_return)">{{ pct(optBestSharpe.total_return) }}</text></view>
+							<view class="best-metric"><text class="m-label">回撤</text><text class="m-val profit-down">{{ pctAbs(optBestSharpe.max_drawdown) }}</text></view>
+						</view>
+						<button class="apply-mini" type="default" size="mini" @click.stop="applyRow(optBestSharpe)">应用</button>
+					</view>
+
+					<view class="best-card best-card-robust" @click="selectByBest('robust')">
+						<view class="best-card-head">
+							<text class="best-card-title">🛡 稳健性最佳</text>
+							<text class="best-ok">✓ 邻居一致</text>
+						</view>
+						<text class="best-card-param" v-if="optBestRobust">n={{ optBestRobust.lookback_n }}  r={{ optBestRobust.rebalance_days }}</text>
+						<view v-if="optBestRobust" class="best-card-metrics">
+							<view class="best-metric"><text class="m-label">平滑Sharpe</text><text class="m-val">{{ fmt(optBestRobust.smoothed_sharpe) }}</text></view>
+							<view class="best-metric"><text class="m-label">收益</text><text class="m-val" :class="profitClass(optBestRobust.total_return)">{{ pct(optBestRobust.total_return) }}</text></view>
+							<view class="best-metric"><text class="m-label">回撤</text><text class="m-val profit-down">{{ pctAbs(optBestRobust.max_drawdown) }}</text></view>
+						</view>
+						<button class="apply-mini" type="default" size="mini" @click.stop="applyRow(optBestRobust)">应用</button>
+					</view>
+
+					<view v-if="optHasOos" class="best-card best-card-oos" @click="selectByBest('oos')">
+						<view class="best-card-head">
+							<text class="best-card-title">🎯 样本外最佳</text>
+							<text v-if="optBestOos" class="best-ok">{{ oosDecayLabel(optBestOos) }}</text>
+						</view>
+						<text class="best-card-param" v-if="optBestOos">n={{ optBestOos.lookback_n }}  r={{ optBestOos.rebalance_days }}</text>
+						<view v-if="optBestOos" class="best-card-metrics">
+							<view class="best-metric"><text class="m-label">OOS Sharpe</text><text class="m-val">{{ fmt(optBestOos.oos_sharpe) }}</text></view>
+							<view class="best-metric"><text class="m-label">IS Sharpe</text><text class="m-val">{{ fmt(optBestOos.sharpe_ratio) }}</text></view>
+							<view class="best-metric"><text class="m-label">OOS 收益</text><text class="m-val" :class="profitClass(optBestOos.oos_total_return)">{{ pct(optBestOos.oos_total_return) }}</text></view>
+						</view>
+						<button class="apply-mini" type="default" size="mini" @click.stop="applyRow(optBestOos)">应用</button>
+					</view>
+				</view>
+
+				<!-- 热力图 Tab -->
+				<view class="heatmap-tabs">
+					<text :class="['heatmap-tab', heatmapMetric === 'composite' ? 'active' : '']" @click="switchHeatmap('composite')">综合得分</text>
+					<text :class="['heatmap-tab', heatmapMetric === 'sharpe' ? 'active' : '']" @click="switchHeatmap('sharpe')">Sharpe</text>
+					<text :class="['heatmap-tab', heatmapMetric === 'mdd' ? 'active' : '']" @click="switchHeatmap('mdd')">最大回撤</text>
+					<text :class="['heatmap-tab', heatmapMetric === 'winrate' ? 'active' : '']" @click="switchHeatmap('winrate')">胜率</text>
+					<text :class="['heatmap-tab', heatmapMetric === 'smoothed' ? 'active' : '']" @click="switchHeatmap('smoothed')">平滑Sharpe</text>
+					<text v-if="optHasOos" :class="['heatmap-tab', heatmapMetric === 'oos' ? 'active' : '']" @click="switchHeatmap('oos')">OOS Sharpe</text>
+				</view>
 				<view id="optimize-chart" class="chart-container"></view>
+
+				<!-- 详细结果表（可折叠） -->
+				<view class="section-title-row sub-fold" @click="optTableOpen = !optTableOpen">
+					<text class="sub-fold-label">详细数据表</text>
+					<text class="fold-icon">{{ optTableOpen ? '▼' : '▶' }}</text>
+				</view>
+				<view v-show="optTableOpen">
+					<view class="opt-table-wrap">
+						<view class="opt-table-head">
+							<text class="opt-th opt-th-narrow" @click="sortBy('lookback_n')">n {{ sortIcon('lookback_n') }}</text>
+							<text class="opt-th opt-th-narrow" @click="sortBy('rebalance_days')">r {{ sortIcon('rebalance_days') }}</text>
+							<text class="opt-th" @click="sortBy('total_return')">收益 {{ sortIcon('total_return') }}</text>
+							<text class="opt-th" @click="sortBy('sharpe_ratio')">Sharpe {{ sortIcon('sharpe_ratio') }}</text>
+							<text class="opt-th" @click="sortBy('smoothed_sharpe')">平滑 {{ sortIcon('smoothed_sharpe') }}</text>
+							<text class="opt-th" @click="sortBy('max_drawdown')">回撤 {{ sortIcon('max_drawdown') }}</text>
+							<text class="opt-th" @click="sortBy('calmar_ratio')">Calmar {{ sortIcon('calmar_ratio') }}</text>
+							<text class="opt-th" @click="sortBy('win_rate')">胜率 {{ sortIcon('win_rate') }}</text>
+							<text class="opt-th opt-th-narrow" @click="sortBy('total_trades')">交易 {{ sortIcon('total_trades') }}</text>
+							<text v-if="optHasOos" class="opt-th" @click="sortBy('oos_sharpe')">OOS {{ sortIcon('oos_sharpe') }}</text>
+						</view>
+						<view
+							v-for="(row, idx) in sortedOptResults"
+							:key="row.lookback_n + '_' + row.rebalance_days"
+							:class="['opt-table-row', selectedRowKey === (row.lookback_n + '_' + row.rebalance_days) ? 'opt-row-selected' : '']"
+							@click="selectRow(row)"
+						>
+							<text class="opt-td opt-td-narrow">{{ row.lookback_n }}</text>
+							<text class="opt-td opt-td-narrow">{{ row.rebalance_days }}</text>
+							<text class="opt-td" :class="profitClass(row.total_return)">{{ pct(row.total_return) }}</text>
+							<text class="opt-td">{{ fmt(row.sharpe_ratio) }}<text v-if="row.robust === false" class="td-warn"> ⚠</text></text>
+							<text class="opt-td">{{ fmt(row.smoothed_sharpe) }}</text>
+							<text class="opt-td profit-down">{{ pctAbs(row.max_drawdown) }}</text>
+							<text class="opt-td">{{ fmt(row.calmar_ratio) }}</text>
+							<text class="opt-td">{{ pct(row.win_rate) }}</text>
+							<text class="opt-td opt-td-narrow">{{ row.total_trades }}</text>
+							<text v-if="optHasOos" class="opt-td">{{ fmt(row.oos_sharpe) }}</text>
+						</view>
+					</view>
+					<!-- 选中行详情：净值曲线（IS / OOS 双色） -->
+					<view v-if="selectedRow" class="opt-detail">
+						<view class="opt-detail-head">
+							<text class="opt-detail-title">选中参数：n={{ selectedRow.lookback_n }}, r={{ selectedRow.rebalance_days }}</text>
+							<button class="apply-mini" type="warn" size="mini" @click="applyRow(selectedRow)">应用此参数</button>
+						</view>
+						<view id="opt-detail-chart" class="chart-container chart-container-sm"></view>
+						<view v-if="optHasOos && selectedRow.oos_sharpe !== null" class="opt-detail-stats">
+							<text class="opt-stat">样本内 Sharpe: <text class="opt-stat-val">{{ fmt(selectedRow.sharpe_ratio) }}</text></text>
+							<text class="opt-stat">样本外 Sharpe: <text class="opt-stat-val">{{ fmt(selectedRow.oos_sharpe) }}</text></text>
+							<text class="opt-stat">IS/OOS 衰减: <text class="opt-stat-val">{{ oosDecayPct(selectedRow) }}</text></text>
+						</view>
+					</view>
+				</view>
+				</view><!-- v-show optSectionOpen 结束 -->
 			</view>
 		</view>
 
@@ -256,8 +364,21 @@ const etfLabel = (code) => {
 // 优化结果
 const optimizing = ref(false)
 const hasOptResult = ref(false)
-const optBest = ref({})
+const optBest = ref({})           // 兼容旧字段（夏普最高）
+const optBestSharpe = ref(null)
+const optBestRobust = ref(null)
+const optBestOos = ref(null)
 const optResults = ref([])
+const optNList = ref([])
+const optRList = ref([])
+const optHasOos = ref(false)
+const enableOos = ref(false)
+const heatmapMetric = ref('composite')   // composite | sharpe | mdd | winrate | smoothed | oos
+const sortKey = ref('sharpe_ratio')
+const sortDir = ref('desc')           // 'asc' | 'desc'
+const selectedRow = ref(null)
+const optSectionOpen = ref(true)      // 优化结果整体折叠
+const optTableOpen = ref(false)       // 详细表格折叠（默认收起）
 
 // 订阅状态
 const subscribed = ref(false)
@@ -281,6 +402,29 @@ const subBtnGroup = computed(() => {
 let momentumChart = null
 let equityChart = null
 let optimizeChart = null
+let optDetailChart = null
+
+const selectedRowKey = computed(() =>
+	selectedRow.value
+		? selectedRow.value.lookback_n + '_' + selectedRow.value.rebalance_days
+		: ''
+)
+
+// 排序后的结果
+const sortedOptResults = computed(() => {
+	const arr = [...optResults.value]
+	const key = sortKey.value
+	const dir = sortDir.value === 'asc' ? 1 : -1
+	arr.sort((a, b) => {
+		const va = a[key]
+		const vb = b[key]
+		if (va == null && vb == null) return 0
+		if (va == null) return 1
+		if (vb == null) return -1
+		return va > vb ? dir : va < vb ? -dir : 0
+	})
+	return arr
+})
 
 const ETF_COLORS = ['#5470c6', '#91cc75', '#fac858', '#ee6666', '#73c0de', '#fc8452']
 
@@ -463,12 +607,17 @@ async function runOptimize() {
 		const formattedStart = startDate.value.replace(/-/g, '/')
 		const formattedEnd = endDate.value.replace(/-/g, '/')
 
-		const res = await getMomentumOptimize({
+		const params = {
 			codes: etfList.value.map(e => e.code).join(','),
 			start_date: formattedStart,
 			end_date: formattedEnd,
 			initial_capital: initialCapital.value,
-		})
+		}
+		if (enableOos.value) {
+			params.oos = 1
+		}
+
+		const res = await getMomentumOptimize(params)
 
 		// VIP 配额拦截
 		if (handleVipBlocked(res)) return
@@ -478,13 +627,25 @@ async function runOptimize() {
 			return
 		}
 
-		optResults.value = res.data.results || []
-		optBest.value = res.data.best || {}
+		const data = res.data
+		optResults.value = data.results || []
+		optNList.value = data.n_list || []
+		optRList.value = data.r_list || []
+		optBest.value = data.best || {}
+		optBestSharpe.value = data.best_sharpe || null
+		optBestRobust.value = data.best_robust || null
+		optBestOos.value = data.best_oos || null
+		optHasOos.value = !!data.oos_enabled
 		hasOptResult.value = true
+		// 默认选中 sharpe 最高那行
+		selectedRow.value = optBestSharpe.value
 
 		await nextTick()
 		const echarts = await loadEcharts()
-		renderOptimizeChart(echarts, res.data)
+		renderOptimizeChart(echarts)
+		if (selectedRow.value) {
+			renderOptDetailChart(echarts)
+		}
 	} catch (e) {
 		console.error('优化失败', e)
 		uni.showToast({ title: '参数优化请求失败', icon: 'none' })
@@ -493,28 +654,55 @@ async function runOptimize() {
 	}
 }
 
-function renderOptimizeChart(echarts, data) {
+function getMetricVal(row, metric) {
+	if (metric === 'sharpe') return row.sharpe_ratio
+	if (metric === 'smoothed') return row.smoothed_sharpe
+	if (metric === 'mdd') return row.max_drawdown
+	if (metric === 'winrate') return row.win_rate
+	if (metric === 'composite') return row.composite_score
+	if (metric === 'oos') return row.oos_sharpe
+	return row.sharpe_ratio
+}
+
+function metricLabel(metric) {
+	return ({
+		sharpe: 'Sharpe', smoothed: '平滑Sharpe', mdd: '最大回撤',
+		winrate: '胜率', composite: '综合得分', oos: 'OOS Sharpe',
+	})[metric] || metric
+}
+
+function renderOptimizeChart(echarts) {
 	if (optimizeChart) { optimizeChart.dispose(); optimizeChart = null }
 	const dom = document.getElementById('optimize-chart')
 	if (!dom) return
 
 	optimizeChart = echarts.init(dom)
-	const results = data.results || []
-	const nList = data.n_list || []
-	const rList = data.r_list || []
+	const results = optResults.value
+	const nList = optNList.value
+	const rList = optRList.value
+	const metric = heatmapMetric.value
 
-	// 构建热力图数据: [rIndex, nIndex, sharpe]
+	const isMdd = metric === 'mdd'
+	const isWinrate = metric === 'winrate'
 	const heatData = []
 	let minVal = Infinity, maxVal = -Infinity
 	for (const row of results) {
 		const ni = nList.indexOf(row.lookback_n)
 		const ri = rList.indexOf(row.rebalance_days)
-		if (ni >= 0 && ri >= 0) {
-			heatData.push([ni, ri, row.sharpe_ratio])
-			minVal = Math.min(minVal, row.sharpe_ratio)
-			maxVal = Math.max(maxVal, row.sharpe_ratio)
+		let v = getMetricVal(row, metric)
+		if (ni >= 0 && ri >= 0 && v != null) {
+			if (isMdd) v = Math.abs(v)
+			heatData.push([ni, ri, v])
+			if (v < minVal) minVal = v
+			if (v > maxVal) maxVal = v
 		}
 	}
+	if (!isFinite(minVal)) { minVal = 0; maxVal = 1 }
+
+	// 回撤：绝对值越小越好 → 绿；越大越差 → 红
+	const colorRange = isMdd
+		? ['#52c41a', '#eac736', '#d94e5d']
+		: ['#d94e5d', '#eac736', '#50a3ba']
 
 	optimizeChart.setOption({
 		tooltip: {
@@ -522,38 +710,46 @@ function renderOptimizeChart(echarts, data) {
 			formatter: (p) => {
 				const n = nList[p.value[0]]
 				const r = rList[p.value[1]]
-				const sharpe = p.value[2]
+				const v = p.value[2]
 				const row = results.find(x => x.lookback_n === n && x.rebalance_days === r)
-				const ret = row ? (row.total_return * 100).toFixed(2) + '%' : '-'
-				return `回看 ${n}天 / 调仓 ${r}天<br/>夏普: ${sharpe}<br/>收益: ${ret}`
+				if (!row) return ''
+				const lines = [
+					`n=${n} / r=${r}`,
+					`${metricLabel(metric)}: ${typeof v === 'number' ? v.toFixed(3) : v}`,
+					`收益: ${(row.total_return * 100).toFixed(2)}%`,
+					`回撤: ${(Math.abs(row.max_drawdown) * 100).toFixed(2)}%`,
+				]
+				if (row.robust === false) lines.push('⚠ 邻居波动大')
+				return lines.join('<br/>')
 			}
 		},
-		grid: { left: '15%', right: '12%', top: 10, bottom: 60 },
+		grid: { left: 40, right: 10, top: 10, bottom: 70 },
 		xAxis: {
 			type: 'category',
-			data: nList.map(n => n + '天'),
+			data: nList.map(n => n + ''),
 			name: '回看天数',
 			nameLocation: 'center',
-			nameGap: 35,
+			nameGap: 25,
 			splitArea: { show: true },
+			axisLabel: { fontSize: 10 },
 		},
 		yAxis: {
 			type: 'category',
-			data: rList.map(r => r + '天'),
-			name: '调仓周期',
+			data: rList.map(r => r + ''),
+			name: '调仓',
 			splitArea: { show: true },
+			axisLabel: { fontSize: 10 },
 		},
 		visualMap: {
 			min: minVal,
 			max: maxVal,
 			calculable: true,
-			orient: 'vertical',
-			right: '2%',
-			top: 'center',
-			itemHeight: 120,
-			inRange: {
-				color: ['#d94e5d', '#eac736', '#50a3ba']
-			},
+			orient: 'horizontal',
+			left: 'center',
+			bottom: 2,
+			itemWidth: 12,
+			itemHeight: 100,
+			inRange: { color: colorRange },
 			textStyle: { fontSize: 10 },
 		},
 		series: [{
@@ -561,7 +757,13 @@ function renderOptimizeChart(echarts, data) {
 			data: heatData,
 			label: {
 				show: true,
-				formatter: (p) => p.value[2].toFixed(2),
+				formatter: (p) => {
+					const v = p.value[2]
+					if (typeof v !== 'number') return ''
+					if (isWinrate) return Math.round(v * 100) + '%'
+					if (isMdd) return (v * 100).toFixed(0) + '%'
+					return v.toFixed(2)
+				},
 				fontSize: 11,
 			},
 			emphasis: {
@@ -571,13 +773,146 @@ function renderOptimizeChart(echarts, data) {
 	})
 }
 
-const applyBest = () => {
-	if (optBest.value) {
-		lookbackN.value = optBest.value.lookback_n
-		rebalanceDays.value = optBest.value.rebalance_days
-		saveParams()
-		uni.showToast({ title: '已应用最优参数', icon: 'success' })
+async function switchHeatmap(metric) {
+	heatmapMetric.value = metric
+	await nextTick()
+	const echarts = await loadEcharts()
+	renderOptimizeChart(echarts)
+}
+
+function sortBy(key) {
+	if (sortKey.value === key) {
+		sortDir.value = sortDir.value === 'asc' ? 'desc' : 'asc'
+	} else {
+		sortKey.value = key
+		sortDir.value = 'desc'
 	}
+}
+
+function sortIcon(key) {
+	if (sortKey.value !== key) return ''
+	return sortDir.value === 'asc' ? '↑' : '↓'
+}
+
+async function selectRow(row) {
+	selectedRow.value = row
+	await nextTick()
+	const echarts = await loadEcharts()
+	renderOptDetailChart(echarts)
+}
+
+function selectByBest(which) {
+	const row = which === 'sharpe' ? optBestSharpe.value
+		: which === 'robust' ? optBestRobust.value
+		: optBestOos.value
+	if (row) selectRow(row)
+}
+
+function applyRow(row) {
+	if (!row) return
+	lookbackN.value = row.lookback_n
+	rebalanceDays.value = row.rebalance_days
+	saveParams()
+	uni.showToast({ title: `已应用 n=${row.lookback_n}, r=${row.rebalance_days}`, icon: 'success' })
+}
+
+const applyBest = () => applyRow(optBest.value)
+
+function renderOptDetailChart(echarts) {
+	if (optDetailChart) { optDetailChart.dispose(); optDetailChart = null }
+	const dom = document.getElementById('opt-detail-chart')
+	if (!dom || !selectedRow.value) return
+
+	optDetailChart = echarts.init(dom)
+	const row = selectedRow.value
+	const isCurve = row.is_equity_curve || []
+	const oosCurve = row.oos_equity_curve || []
+
+	const series = []
+	if (isCurve.length) {
+		series.push({
+			name: '样本内',
+			type: 'line',
+			data: isCurve.map(it => [it[0], it[1]]),
+			showSymbol: false,
+			smooth: true,
+			lineStyle: { width: 2, color: '#5470c6' },
+			itemStyle: { color: '#5470c6' },
+			areaStyle: { opacity: 0.1 },
+		})
+	}
+	if (oosCurve.length) {
+		series.push({
+			name: '样本外',
+			type: 'line',
+			data: oosCurve.map(it => [it[0], it[1]]),
+			showSymbol: false,
+			smooth: true,
+			lineStyle: { width: 2, color: '#ee6666' },
+			itemStyle: { color: '#ee6666' },
+			areaStyle: { opacity: 0.1 },
+		})
+	}
+
+	optDetailChart.setOption({
+		tooltip: {
+			trigger: 'axis',
+			formatter: (params) => {
+				const lines = []
+				params.forEach(p => {
+					lines.push(`${p.seriesName}: ${(p.value[1] / 10000).toFixed(2)}万`)
+				})
+				return `${params[0].axisValue}<br/>${lines.join('<br/>')}`
+			}
+		},
+		legend: { data: series.map(s => s.name), top: 0 },
+		grid: { left: '12%', right: '4%', top: 30, bottom: 40 },
+		xAxis: { type: 'time' },
+		yAxis: {
+			type: 'value',
+			scale: true,
+			axisLabel: { formatter: (v) => (v / 10000).toFixed(0) + '万' }
+		},
+		series,
+	})
+}
+
+function fmt(v) {
+	if (v == null || isNaN(v)) return '-'
+	return Number(v).toFixed(2)
+}
+
+function pct(v) {
+	if (v == null || isNaN(v)) return '-'
+	return (Number(v) * 100).toFixed(2) + '%'
+}
+
+function pctAbs(v) {
+	if (v == null || isNaN(v)) return '-'
+	return (Math.abs(Number(v)) * 100).toFixed(2) + '%'
+}
+
+function profitClass(v) {
+	if (v == null) return ''
+	return v >= 0 ? 'profit-up' : 'profit-down'
+}
+
+function oosDecayPct(row) {
+	if (!row || row.sharpe_ratio == null || row.oos_sharpe == null) return '-'
+	if (row.sharpe_ratio === 0) return '-'
+	const decay = (row.sharpe_ratio - row.oos_sharpe) / Math.abs(row.sharpe_ratio)
+	return (decay * 100).toFixed(0) + '%'
+}
+
+function oosDecayLabel(row) {
+	if (!row || row.oos_sharpe == null || row.sharpe_ratio == null) return ''
+	const decay = (row.sharpe_ratio - row.oos_sharpe) / Math.max(Math.abs(row.sharpe_ratio), 0.01)
+	if (decay <= 0.5) return '✓ OOS 与 IS 接近'
+	return '⚠ OOS 衰减明显'
+}
+
+function onOosChange(e) {
+	enableOos.value = e.detail.value
 }
 
 async function runBacktest() {
@@ -718,6 +1053,7 @@ function onResize() {
 	momentumChart && momentumChart.resize()
 	equityChart && equityChart.resize()
 	optimizeChart && optimizeChart.resize()
+	optDetailChart && optDetailChart.resize()
 }
 
 if (typeof window !== 'undefined') {
@@ -731,6 +1067,7 @@ onBeforeUnmount(() => {
 	if (momentumChart) { momentumChart.dispose(); momentumChart = null }
 	if (equityChart) { equityChart.dispose(); equityChart = null }
 	if (optimizeChart) { optimizeChart.dispose(); optimizeChart = null }
+	if (optDetailChart) { optDetailChart.dispose(); optDetailChart = null }
 })
 </script>
 
@@ -1074,5 +1411,265 @@ onBeforeUnmount(() => {
 
 .apply-btn {
 	margin-bottom: 12px;
+}
+
+/* ===== 折叠 ===== */
+.section-title-row {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	cursor: pointer;
+	margin-bottom: 12px;
+}
+
+.section-title-row .section-title {
+	margin-bottom: 0;
+}
+
+.fold-icon {
+	font-size: 12px;
+	color: #999;
+}
+
+.sub-fold {
+	margin-top: 12px;
+	margin-bottom: 4px;
+	padding: 8px 0;
+	border-top: 1px dashed #ececec;
+}
+
+.sub-fold-label {
+	font-size: 13px;
+	color: #666;
+	font-weight: 500;
+}
+
+/* ===== 优化结果新版样式 ===== */
+.opt-extra-row {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.opt-extra-hint {
+	font-size: 11px;
+	color: #999;
+}
+
+.best-cards {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	margin-bottom: 12px;
+}
+
+.best-card {
+	flex: 1;
+	min-width: 200px;
+	background: #fafbfc;
+	border: 1px solid #e8eaed;
+	border-radius: 8px;
+	padding: 10px 12px;
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	cursor: pointer;
+	transition: box-shadow 0.15s;
+}
+
+.best-card:hover {
+	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.best-card-sharpe { border-left: 3px solid #faad14; }
+.best-card-robust { border-left: 3px solid #52c41a; }
+.best-card-oos { border-left: 3px solid #1890ff; }
+
+.best-card-head {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+}
+
+.best-card-title {
+	font-size: 13px;
+	font-weight: 600;
+	color: #333;
+}
+
+.best-warn {
+	font-size: 11px;
+	color: #d4380d;
+	background: #fff1f0;
+	border-radius: 10px;
+	padding: 1px 6px;
+}
+
+.best-ok {
+	font-size: 11px;
+	color: #389e0d;
+	background: #f6ffed;
+	border-radius: 10px;
+	padding: 1px 6px;
+}
+
+.best-card-param {
+	font-size: 13px;
+	font-weight: 600;
+	color: #5470c6;
+}
+
+.best-card-metrics {
+	display: flex;
+	gap: 8px;
+	flex-wrap: wrap;
+}
+
+.best-metric {
+	display: flex;
+	flex-direction: column;
+	flex: 1;
+	min-width: 60px;
+}
+
+.m-label {
+	font-size: 10px;
+	color: #999;
+}
+
+.m-val {
+	font-size: 13px;
+	font-weight: 600;
+	color: #333;
+}
+
+.apply-mini {
+	align-self: flex-start;
+	font-size: 11px !important;
+	min-height: 24px !important;
+	line-height: 22px !important;
+	padding: 0 10px !important;
+	margin-top: 2px;
+}
+
+.heatmap-tabs {
+	display: flex;
+	gap: 6px;
+	margin: 12px 0 4px;
+	flex-wrap: wrap;
+}
+
+.heatmap-tab {
+	font-size: 12px;
+	color: #666;
+	padding: 4px 10px;
+	background: #f3f4f6;
+	border-radius: 12px;
+	cursor: pointer;
+}
+
+.heatmap-tab.active {
+	background: #5470c6;
+	color: #fff;
+}
+
+.opt-table-wrap {
+	margin-top: 12px;
+	border: 1px solid #ececec;
+	border-radius: 6px;
+	overflow-x: auto;
+}
+
+.opt-table-head {
+	display: flex;
+	background: #f7f8fa;
+	border-bottom: 1px solid #ececec;
+	min-width: 720px;
+}
+
+.opt-th {
+	flex: 1;
+	font-size: 11px;
+	color: #666;
+	padding: 8px 4px;
+	text-align: center;
+	cursor: pointer;
+	user-select: none;
+}
+
+.opt-th-narrow {
+	max-width: 50px;
+}
+
+.opt-table-row {
+	display: flex;
+	border-bottom: 1px solid #f3f3f3;
+	min-width: 720px;
+	cursor: pointer;
+}
+
+.opt-table-row:hover {
+	background: #f9fbff;
+}
+
+.opt-row-selected {
+	background: #fffbe6 !important;
+}
+
+.opt-td {
+	flex: 1;
+	font-size: 12px;
+	color: #333;
+	padding: 8px 4px;
+	text-align: center;
+}
+
+.opt-td-narrow {
+	max-width: 50px;
+}
+
+.td-warn {
+	color: #d4380d;
+	font-size: 11px;
+}
+
+.opt-detail {
+	margin-top: 16px;
+	padding-top: 12px;
+	border-top: 1px dashed #ececec;
+}
+
+.opt-detail-head {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	margin-bottom: 8px;
+}
+
+.opt-detail-title {
+	font-size: 13px;
+	font-weight: 600;
+	color: #333;
+}
+
+.chart-container-sm {
+	height: 220px;
+}
+
+.opt-detail-stats {
+	display: flex;
+	gap: 12px;
+	margin-top: 8px;
+	flex-wrap: wrap;
+}
+
+.opt-stat {
+	font-size: 12px;
+	color: #666;
+}
+
+.opt-stat-val {
+	color: #5470c6;
+	font-weight: 600;
 }
 </style>

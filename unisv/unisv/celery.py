@@ -1,5 +1,12 @@
 from __future__ import absolute_import, unicode_literals
 import os
+
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 from celery import Celery
 
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'unisv.settings')

@@ -9,8 +9,14 @@ https://docs.djangoproject.com/en/5.2/howto/deployment/wsgi/
 
 import os
 
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 from django.core.wsgi import get_wsgi_application
 
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'todo_project.settings')
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'unisv.settings')
 
 application = get_wsgi_application()

@@ -142,6 +142,20 @@ def run_rotation_backtest(etf_history_dict, start_date, end_date=None,
     # 计算夏普比率（年化，无风险利率按2.5%）
     sharpe_ratio = _calculate_sharpe(equity_curve, risk_free_rate=0.025)
 
+    # 最大回撤
+    max_drawdown = _calculate_max_drawdown(equity_curve)
+
+    # Calmar 比率（年化收益 / 最大回撤）
+    annualized_return = _calculate_annualized_return(equity_curve, initial_capital)
+    calmar_ratio = round(annualized_return / abs(max_drawdown), 4) if max_drawdown < 0 else 0.0
+
+    # 胜率（已平仓交易里赚钱的占比）
+    if trade_records:
+        wins = sum(1 for t in trade_records if t.get('profitRate', 0) > 0)
+        win_rate = round(wins / len(trade_records), 4)
+    else:
+        win_rate = 0.0
+
     # 当前持仓信息
     current_holding = None
     if holding_code and holding_shares > 0 and trade_dates:
@@ -164,7 +178,11 @@ def run_rotation_backtest(etf_history_dict, start_date, end_date=None,
         "initial_capital": initial_capital,
         "final_equity": final_equity,
         "total_return": round(total_return, 4),
+        "annualized_return": annualized_return,
         "sharpe_ratio": sharpe_ratio,
+        "max_drawdown": max_drawdown,
+        "calmar_ratio": calmar_ratio,
+        "win_rate": win_rate,
         "total_trades": len(trade_records),
         "start_date": trade_dates[0] if trade_dates else start_date,
         "end_date": trade_dates[-1] if trade_dates else start_date,
@@ -212,3 +230,30 @@ def _calculate_sharpe(equity_curve, risk_free_rate=0.025):
 
     sharpe = np.mean(excess_returns) / np.std(excess_returns) * np.sqrt(trading_days)
     return round(float(sharpe), 4)
+
+
+def _calculate_max_drawdown(equity_curve):
+    """计算最大回撤（以负数返回，例如 -0.225 表示 -22.5%）。"""
+    if len(equity_curve) < 2:
+        return 0.0
+    equities = np.array([e[1] for e in equity_curve], dtype=float)
+    running_max = np.maximum.accumulate(equities)
+    drawdowns = (equities - running_max) / running_max
+    return round(float(drawdowns.min()), 4)
+
+
+def _calculate_annualized_return(equity_curve, initial_capital):
+    """根据权益曲线计算年化收益率。"""
+    if len(equity_curve) < 2:
+        return 0.0
+    final = equity_curve[-1][1]
+    total_return = (final - initial_capital) / initial_capital
+    days = len(equity_curve)
+    years = days / 242.0
+    if years <= 0:
+        return 0.0
+    try:
+        ann = (1 + total_return) ** (1 / years) - 1
+    except (ValueError, ZeroDivisionError):
+        return 0.0
+    return round(float(ann), 4)

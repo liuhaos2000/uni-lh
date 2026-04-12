@@ -6,6 +6,7 @@ from rest_framework import status
 import requests as http_requests
 import json
 import re
+import numpy as np
 from datetime import date, datetime, time as dtime
 from django.core.cache import cache
 from django.utils import timezone
@@ -412,46 +413,234 @@ def momentum_optimize(request):
             return Response({"code": 400, "message": err},
                             status=status.HTTP_400_BAD_REQUEST)
 
-        # 遍历组合
-        results = []
-        best = None
-        for n in n_list:
-            for r in r_list:
-                result = run_rotation_backtest(
-                    etf_history_dict=etf_history_dict,
-                    start_date=start_date,
-                    end_date=end_date,
-                    initial_capital=initial_capital,
-                    lookback_n=n,
-                    rebalance_days=r,
-                )
-                summary = result.get('summary', {})
-                row = {
-                    "lookback_n": n,
-                    "rebalance_days": r,
-                    "total_return": summary.get('total_return', 0),
-                    "sharpe_ratio": summary.get('sharpe_ratio', 0),
-                    "total_trades": summary.get('total_trades', 0),
-                    "final_equity": summary.get('final_equity', 0),
-                }
-                results.append(row)
-                if best is None or row['sharpe_ratio'] > best['sharpe_ratio']:
-                    best = row
+        # 是否启用样本外验证
+        oos_enabled = request.query_params.get('oos', '0') in ('1', 'true', 'True')
+        oos_split = float(request.query_params.get('oos_split', 0.7))
+        oos_split = max(0.5, min(0.9, oos_split))
+
+        # 计算样本内/样本外日期切分
+        is_end_date = end_date
+        oos_start_date = None
+        if oos_enabled:
+            is_end_date, oos_start_date = _split_date_range(
+                etf_history_dict, start_date, end_date, oos_split
+            )
+
+        # 遍历参数组合，每组跑 1 次或 2 次回测
+        results = _run_grid(
+            etf_history_dict, n_list, r_list,
+            start_date, is_end_date, initial_capital,
+            oos_enabled, oos_start_date, end_date,
+        )
+
+        # 计算邻域平滑 sharpe（防过拟合）
+        _attach_smoothed_sharpe(results, n_list, r_list)
+
+        # 标记每行的稳健性（邻居 sharpe 标准差是否小）
+        _attach_robustness_flag(results, n_list, r_list)
+        _attach_composite_score(results)
+
+        # 各维度 best
+        best_sharpe = max(results, key=lambda x: x['sharpe_ratio']) if results else None
+        best_robust = max(results, key=lambda x: x['smoothed_sharpe']) if results else None
+        best_composite = max(results, key=lambda x: x['composite_score']) if results else None
+        best_oos = None
+        if oos_enabled and results:
+            with_oos = [r for r in results if r.get('oos_sharpe') is not None]
+            if with_oos:
+                best_oos = max(with_oos, key=lambda x: x['oos_sharpe'])
 
         return Response({
             "code": 0,
             "message": "success",
             "data": {
                 "results": results,
-                "best": best,
+                "best": best_sharpe,            # 兼容旧字段
+                "best_sharpe": best_sharpe,
+                "best_robust": best_robust,
+                "best_composite": best_composite,
+                "best_oos": best_oos,
                 "n_list": n_list,
                 "r_list": r_list,
+                "oos_enabled": oos_enabled,
+                "oos_split": oos_split,
+                "is_end_date": is_end_date,
+                "oos_start_date": oos_start_date,
             }
         })
 
     except Exception as e:
         return Response({"code": 500, "message": f"参数优化失败: {str(e)}"},
                         status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+def _split_date_range(etf_history_dict, start_date, end_date, split_ratio):
+    """按 split_ratio 把 [start_date, end_date] 切成样本内 / 样本外两段。
+
+    返回 (is_end_date, oos_start_date)，都是 'YYYY/MM/DD' 字符串。
+    切分点选自 ETF 共同交易日，确保切点是真实交易日。
+    """
+    # 取 ETF 共同交易日
+    date_sets = [set(row[0] for row in rows) for rows in etf_history_dict.values()]
+    common = sorted(set.intersection(*date_sets))
+    in_range = [d for d in common if start_date <= d <= end_date]
+    if len(in_range) < 20:
+        # 数据太少不切分
+        return end_date, None
+    split_idx = int(len(in_range) * split_ratio)
+    is_end = in_range[split_idx - 1]
+    oos_start = in_range[split_idx]
+    return is_end, oos_start
+
+
+def _run_grid(etf_history_dict, n_list, r_list,
+              start_date, is_end_date, initial_capital,
+              oos_enabled, oos_start_date, full_end_date):
+    """在 (n, r) 参数网格上跑回测，返回 results 列表。"""
+    results = []
+    for n in n_list:
+        for r in r_list:
+            res = run_rotation_backtest(
+                etf_history_dict=etf_history_dict,
+                start_date=start_date,
+                end_date=is_end_date,
+                initial_capital=initial_capital,
+                lookback_n=n,
+                rebalance_days=r,
+            )
+            s = res.get('summary', {}) or {}
+            row = {
+                "lookback_n": n,
+                "rebalance_days": r,
+                "total_return": s.get('total_return', 0),
+                "annualized_return": s.get('annualized_return', 0),
+                "sharpe_ratio": s.get('sharpe_ratio', 0),
+                "max_drawdown": s.get('max_drawdown', 0),
+                "calmar_ratio": s.get('calmar_ratio', 0),
+                "win_rate": s.get('win_rate', 0),
+                "total_trades": s.get('total_trades', 0),
+                "final_equity": s.get('final_equity', 0),
+                "is_equity_curve": res.get('equity_curve', []),
+                "oos_sharpe": None,
+                "oos_total_return": None,
+                "oos_max_drawdown": None,
+                "oos_equity_curve": None,
+            }
+            if oos_enabled and oos_start_date:
+                oos_res = run_rotation_backtest(
+                    etf_history_dict=etf_history_dict,
+                    start_date=oos_start_date,
+                    end_date=full_end_date,
+                    initial_capital=initial_capital,
+                    lookback_n=n,
+                    rebalance_days=r,
+                )
+                oos_s = oos_res.get('summary', {}) or {}
+                row['oos_sharpe'] = oos_s.get('sharpe_ratio', 0)
+                row['oos_total_return'] = oos_s.get('total_return', 0)
+                row['oos_max_drawdown'] = oos_s.get('max_drawdown', 0)
+                row['oos_equity_curve'] = oos_res.get('equity_curve', [])
+            results.append(row)
+    return results
+
+
+def _attach_smoothed_sharpe(results, n_list, r_list):
+    """对每个 (n, r) 计算 3x3 邻域 sharpe 均值，写入 row['smoothed_sharpe']。"""
+    grid = {(r['lookback_n'], r['rebalance_days']): r['sharpe_ratio'] for r in results}
+    n_set = set(n_list)
+    r_set = set(r_list)
+    for row in results:
+        n = row['lookback_n']
+        r = row['rebalance_days']
+        n_idx = n_list.index(n)
+        r_idx = r_list.index(r)
+        neighbors = []
+        for dn in (-1, 0, 1):
+            for dr in (-1, 0, 1):
+                ni = n_idx + dn
+                ri = r_idx + dr
+                if 0 <= ni < len(n_list) and 0 <= ri < len(r_list):
+                    nn = n_list[ni]
+                    rr = r_list[ri]
+                    if (nn, rr) in grid:
+                        neighbors.append(grid[(nn, rr)])
+        if neighbors:
+            row['smoothed_sharpe'] = round(sum(neighbors) / len(neighbors), 4)
+        else:
+            row['smoothed_sharpe'] = row['sharpe_ratio']
+
+
+def _attach_robustness_flag(results, n_list, r_list):
+    """对每个 (n, r) 计算邻居 sharpe 的标准差，标记是否过拟合。
+
+    robust=True   邻居一致（std 小）
+    robust=False  邻居波动大（std 大），有过拟合嫌疑
+    """
+    grid = {(row['lookback_n'], row['rebalance_days']): row['sharpe_ratio'] for row in results}
+    # 用全网格 sharpe 的中位差作为阈值
+    all_sharpes = [row['sharpe_ratio'] for row in results]
+    if not all_sharpes:
+        return
+    overall_std = float(np.std(all_sharpes)) if len(all_sharpes) > 1 else 0.0
+    threshold = max(overall_std * 0.5, 0.3)  # 邻居 std 超过这个就算"波动大"
+
+    for row in results:
+        n = row['lookback_n']
+        r = row['rebalance_days']
+        n_idx = n_list.index(n)
+        r_idx = r_list.index(r)
+        neighbors = []
+        for dn in (-1, 0, 1):
+            for dr in (-1, 0, 1):
+                if dn == 0 and dr == 0:
+                    continue
+                ni = n_idx + dn
+                ri = r_idx + dr
+                if 0 <= ni < len(n_list) and 0 <= ri < len(r_list):
+                    nn = n_list[ni]
+                    rr = r_list[ri]
+                    if (nn, rr) in grid:
+                        neighbors.append(grid[(nn, rr)])
+        if len(neighbors) >= 2:
+            std = float(np.std(neighbors))
+            row['neighbor_std'] = round(std, 4)
+            row['robust'] = std <= threshold
+        else:
+            row['neighbor_std'] = 0.0
+            row['robust'] = True
+
+
+def _attach_composite_score(results):
+    """综合评分：标准化 + 加权 + 惩罚。
+
+    标准化（压到 0~1）：
+      夏普得分  = min(sharpe / 2.0, 1.0)
+      回撤得分  = 1 - min(|max_dd| / 0.3, 1.0)
+      胜率得分  = clamp((win_rate - 0.4) / 0.3, 0, 1)
+
+    加权：0.5 × 夏普 + 0.3 × 回撤 + 0.2 × 胜率
+
+    惩罚：
+      |max_dd| > 0.3 → ×0.7
+      sharpe < 0.8   → ×0.8
+    """
+    for row in results:
+        sharpe = row.get('sharpe_ratio', 0) or 0
+        max_dd = abs(row.get('max_drawdown', 0) or 0)
+        win_rate = row.get('win_rate', 0) or 0
+
+        score_sharpe = min(sharpe / 2.0, 1.0)
+        score_dd = 1.0 - min(max_dd / 0.3, 1.0)
+        score_win = max(0.0, min((win_rate - 0.4) / 0.3, 1.0))
+
+        composite = 0.5 * score_sharpe + 0.3 * score_dd + 0.2 * score_win
+
+        if max_dd > 0.3:
+            composite *= 0.7
+        if sharpe < 0.8:
+            composite *= 0.8
+
+        row['composite_score'] = round(composite, 4)
 
 
 @api_view(['GET', 'POST', 'DELETE'])

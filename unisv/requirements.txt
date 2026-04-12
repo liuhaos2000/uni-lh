@@ -11,3 +11,4 @@ numpy
 akshare
 chinesecalendar
 Pillow
+python-dotenv

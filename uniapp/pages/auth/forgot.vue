@@ -191,17 +191,17 @@ onUnmounted(() => {
 	min-height: 100vh;
 	background: #f5f6fa;
 	padding: 30px 20px;
-	display: flex;
-	justify-content: center;
-	align-items: flex-start;
+	box-sizing: border-box;
 }
 
 .auth-card {
 	width: 100%;
 	max-width: 420px;
+	margin: 0 auto;
 	background: #fff;
 	border-radius: 12px;
 	padding: 28px 22px;
+	box-sizing: border-box;
 	box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06);
 }
 
@@ -221,24 +221,25 @@ onUnmounted(() => {
 }
 
 .form-item {
-	display: flex;
-	flex-direction: column;
-	align-items: stretch;
 	margin-bottom: 14px;
 }
 
 .form-label {
+	display: block;
 	font-size: 13px;
 	color: #666;
 	margin-bottom: 6px;
 }
 
 .form-input {
-	flex: 1;
+	display: block;
+	width: 100%;
+	height: 44px;
+	line-height: 24px;
 	border: 1px solid #e0e0e0;
 	border-radius: 6px;
 	padding: 10px 12px;
-	font-size: 15px;
+	font-size: 16px;
 	background: #fafafa;
 	box-sizing: border-box;
 }
