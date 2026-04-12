@@ -7,6 +7,7 @@
 """
 import base64
 import io
+import os
 import random
 import string
 import uuid
@@ -20,6 +21,42 @@ CAPTCHA_CACHE_PREFIX = 'captcha:'
 # 排除容易混淆的字符
 _CHARS = ''.join(c for c in (string.ascii_uppercase + string.digits) if c not in 'O0I1L')
 
+# 候选字体路径：覆盖 Debian / Ubuntu / Alpine / CentOS / macOS
+# truetype() 仅传文件名时未必能命中，因此优先用绝对路径
+_FONT_CANDIDATES = (
+    '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',
+    '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
+    '/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf',
+    '/usr/share/fonts/truetype/freefont/FreeSansBold.ttf',
+    '/usr/share/fonts/dejavu/DejaVuSans-Bold.ttf',
+    '/usr/share/fonts/TTF/DejaVuSans-Bold.ttf',
+    '/usr/share/fonts/dejavu-sans-fonts/DejaVuSans-Bold.ttf',
+    '/usr/share/fonts/liberation/LiberationSans-Bold.ttf',
+    '/Library/Fonts/Arial.ttf',
+    '/System/Library/Fonts/Supplemental/Arial.ttf',
+    '/System/Library/Fonts/Helvetica.ttc',
+    'DejaVuSans-Bold.ttf',
+    'Arial.ttf',
+)
+
+
+def _load_font(size: int):
+    """按候选列表加载 TTF；失败时返回 Pillow 默认字体（尽量带 size）。"""
+    from PIL import ImageFont
+
+    for path in _FONT_CANDIDATES:
+        try:
+            if path.startswith('/') and not os.path.exists(path):
+                continue
+            return ImageFont.truetype(path, size)
+        except (OSError, IOError):
+            continue
+    # Pillow 10+ 的 load_default 支持 size 参数
+    try:
+        return ImageFont.load_default(size=size)
+    except TypeError:
+        return ImageFont.load_default()
+
 
 def _gen_text(n: int = CAPTCHA_LEN) -> str:
     return ''.join(random.choice(_CHARS) for _ in range(n))
@@ -28,7 +65,7 @@ def _gen_text(n: int = CAPTCHA_LEN) -> str:
 def _gen_image(text: str) -> bytes:
     """生成带干扰的 PNG 图片字节，如果 Pillow 不可用则返回空字节。"""
     try:
-        from PIL import Image, ImageDraw, ImageFilter, ImageFont
+        from PIL import Image, ImageDraw, ImageFilter
     except ImportError:
         return b''
 
@@ -37,16 +74,9 @@ def _gen_image(text: str) -> bytes:
     image = Image.new('RGB', (width, height), bg_color)
     draw = ImageDraw.Draw(image)
 
-    # 字体：系统默认即可
+    # 字体：从候选 TTF 列表中加载，找不到时退回 Pillow 默认字体
     font_size = 36
-    try:
-        font = ImageFont.truetype('DejaVuSans-Bold.ttf', font_size)
-    except (OSError, IOError):
-        try:
-            font = ImageFont.truetype('Arial.ttf', font_size)
-        except (OSError, IOError):
-            font = ImageFont.load_default()
-            
+    font = _load_font(font_size)
 
     # 干扰点
     for _ in range(120):

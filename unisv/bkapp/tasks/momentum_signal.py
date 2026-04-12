@@ -76,7 +76,7 @@ def push_one_signal(watch: MomentumWatch):
     etf_history_dict = {}
     for code in etf_codes:
         try:
-            data = fetch_etf_history(code)
+            data = fetch_etf_history(code, include_realtime=True)
             if not data:
                 logger.warning(f'ETF {code} 无数据，跳过 watch={watch.id}')
                 return

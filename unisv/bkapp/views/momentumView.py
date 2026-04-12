@@ -6,7 +6,9 @@ from rest_framework import status
 import requests as http_requests
 import json
 import re
+from datetime import date, datetime, time as dtime
 from django.core.cache import cache
+from django.utils import timezone
 
 from ..logic.momentum.rotation_backtest import run_rotation_backtest
 from ..models.momentum_watch import MomentumWatch
@@ -65,11 +67,78 @@ def _get_market_prefix(code):
         return 'sz'
 
 
-def fetch_etf_history(code):
+def _is_trade_day(d: date) -> bool:
+    """判断给定日期是不是 A 股交易日（排除周末和法定节假日）。"""
+    if d.weekday() >= 5:
+        return False
+    try:
+        import chinese_calendar
+        return chinese_calendar.is_workday(d) and not chinese_calendar.is_holiday(d)
+    except ImportError:
+        return True
+    except (NotImplementedError, KeyError):
+        return True
+
+
+def _in_trading_session(now: datetime = None) -> bool:
+    """是否在 A 股盘中（含午休前后），用于决定是否要叠加实时 bar。
+
+    时间窗口：09:30–11:30 + 13:00–15:00（含 14:57 收盘集合）。
+    收盘后（>=15:00）当天日线已落库，无需叠加。
+    """
+    now = now or timezone.localtime()
+    if not _is_trade_day(now.date()):
+        return False
+    t = now.time()
+    morning = dtime(9, 30) <= t <= dtime(11, 30)
+    afternoon = dtime(13, 0) <= t < dtime(15, 0)
+    return morning or afternoon
+
+
+def _fetch_realtime_bar(code):
+    """通过 sinajs 实时接口获取当日临时 bar，构造 [date, open, high, low, close, volume]。
+
+    返回 None 表示拿不到有效数据（停牌/未开盘/接口异常）。
+    """
+    symbol = f'{_get_market_prefix(code)}{code}'
+    url = f'https://hq.sinajs.cn/list={symbol}'
+    headers = {
+        'User-Agent': 'Mozilla/5.0',
+        'Referer': 'https://finance.sina.com.cn',
+    }
+    try:
+        r = http_requests.get(url, headers=headers, timeout=5)
+        m = re.match(r'var hq_str_\w+="([^"]*)"', r.text.strip())
+        if not m:
+            return None
+        fields = m.group(1).split(',')
+        # sinajs 字段：name,open,prev_close,current,high,low,...,volume(8),amount(9),...,date(30),time(31)
+        if len(fields) < 32:
+            return None
+        open_p = float(fields[1] or 0)
+        current = float(fields[3] or 0)
+        high = float(fields[4] or 0)
+        low = float(fields[5] or 0)
+        volume = float(fields[8] or 0)
+        if current <= 0 or open_p <= 0:
+            # 停牌或还未开盘
+            return None
+        date_str = (fields[30] or '').replace('-', '/')
+        if not date_str:
+            return None
+        return [date_str, open_p, high, low, current, volume]
+    except Exception:
+        return None
+
+
+def fetch_etf_history(code, include_realtime=False):
     """通过新浪财经接口获取 ETF 历史日线数据。
 
     Args:
         code: ETF代码，如 '518880'
+        include_realtime: 是否在交易时段叠加当前价作为今日临时 bar。
+            - 信号推送 / 回测页面：True
+            - 参数优化：False（保持纯历史，结果可复现）
 
     Returns:
         list: [(date_str, open, high, low, close, volume), ...]
@@ -77,45 +146,57 @@ def fetch_etf_history(code):
     """
     cache_key = f"etf_hist_{code}"
     cached = cache.get(cache_key)
-    if cached:
-        return cached
+    if cached is not None:
+        result = cached
+    else:
+        market = _get_market_prefix(code)
+        symbol = f'{market}{code}'
 
-    market = _get_market_prefix(code)
-    symbol = f'{market}{code}'
+        url = 'https://quotes.sina.cn/cn/api/jsonp_v2.php/var%20callback=/CN_MarketDataService.getKLineData'
+        params = {
+            'symbol': symbol,
+            'scale': '240',   # 日线
+            'ma': 'no',
+            'datalen': '1000',
+        }
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        }
 
-    url = 'https://quotes.sina.cn/cn/api/jsonp_v2.php/var%20callback=/CN_MarketDataService.getKLineData'
-    params = {
-        'symbol': symbol,
-        'scale': '240',   # 日线
-        'ma': 'no',
-        'datalen': '1000',
-    }
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-    }
+        r = http_requests.get(url, params=params, headers=headers, timeout=15)
 
-    r = http_requests.get(url, params=params, headers=headers, timeout=15)
+        match = re.search(r'\[.*\]', r.text)
+        if not match:
+            raise Exception(f"ETF {code} 数据解析失败")
 
-    match = re.search(r'\[.*\]', r.text)
-    if not match:
-        raise Exception(f"ETF {code} 数据解析失败")
+        raw_data = json.loads(match.group())
 
-    raw_data = json.loads(match.group())
+        result = []
+        for item in raw_data:
+            date_str = item['day'].replace('-', '/')
+            result.append([
+                date_str,
+                float(item['open']),
+                float(item['high']),
+                float(item['low']),
+                float(item['close']),
+                float(item['volume']),
+            ])
 
-    result = []
-    for item in raw_data:
-        date_str = item['day'].replace('-', '/')
-        result.append([
-            date_str,
-            float(item['open']),
-            float(item['high']),
-            float(item['low']),
-            float(item['close']),
-            float(item['volume']),
-        ])
+        # 历史数据缓存1小时
+        cache.set(cache_key, result, 3600)
 
-    # 缓存1小时
-    cache.set(cache_key, result, 3600)
+    # 盘中实时叠加：在副本上 merge，不污染缓存
+    if include_realtime and _in_trading_session():
+        rt_bar = _fetch_realtime_bar(code)
+        if rt_bar is not None:
+            merged = list(result)
+            if merged and merged[-1][0] == rt_bar[0]:
+                merged[-1] = rt_bar          # 同日替换
+            else:
+                merged.append(rt_bar)        # 追加为今日临时 bar
+            return merged
+
     return result
 
 
@@ -161,10 +242,11 @@ def momentum_backtest(request):
                             status=status.HTTP_400_BAD_REQUEST)
 
         # 获取每个ETF的历史数据（新浪财经）
+        # 回测：盘中叠加实时价作为今日临时 bar，便于实时观察当日信号
         etf_history_dict = {}
         for code in etf_codes:
             try:
-                raw_data = fetch_etf_history(code)
+                raw_data = fetch_etf_history(code, include_realtime=True)
                 if not raw_data:
                     return Response({
                         "code": 400,
