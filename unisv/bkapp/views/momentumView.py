@@ -131,6 +131,66 @@ def _fetch_realtime_bar(code):
         return None
 
 
+def _parse_date(s):
+    """把 'YYYY/MM/DD' 或 'YYYY-MM-DD' 解析为 date，失败返回 None。"""
+    if not s:
+        return None
+    s = s.strip().replace('-', '/')
+    try:
+        return datetime.strptime(s, '%Y/%m/%d').date()
+    except ValueError:
+        return None
+
+
+def validate_date_range(etf_history_dict, start_date, end_date):
+    """检查回测起止日期是否落在所有 ETF 的可用数据范围内。
+
+    Returns:
+        (ok, error_message)
+        ok=True 表示通过；ok=False 时 error_message 是给前端的提示。
+    """
+    s = _parse_date(start_date)
+    e = _parse_date(end_date)
+    if s is None:
+        return False, f'起始日期格式错误：{start_date}（应为 YYYY/MM/DD）'
+    if e is None:
+        return False, f'结束日期格式错误：{end_date}（应为 YYYY/MM/DD）'
+    if s > e:
+        return False, f'起始日期 {start_date} 晚于结束日期 {end_date}'
+
+    # 每个 ETF 的可用区间
+    bottleneck_first_code = None
+    bottleneck_first_date = None
+    bottleneck_last_code = None
+    bottleneck_last_date = None
+    for code, rows in etf_history_dict.items():
+        if not rows:
+            return False, f'ETF {code} 无历史数据'
+        first = _parse_date(rows[0][0])
+        last = _parse_date(rows[-1][0])
+        if first is None or last is None:
+            continue
+        if bottleneck_first_date is None or first > bottleneck_first_date:
+            bottleneck_first_date = first
+            bottleneck_first_code = code
+        if bottleneck_last_date is None or last < bottleneck_last_date:
+            bottleneck_last_date = last
+            bottleneck_last_code = code
+
+    if bottleneck_first_date and s < bottleneck_first_date:
+        return False, (
+            f'起始日期 {start_date} 早于可用数据范围。'
+            f'ETF {bottleneck_first_code} 最早只到 {bottleneck_first_date.strftime("%Y/%m/%d")}，'
+            f'请把起始日期调到该日期之后，或从 ETF 列表中移除该标的。'
+        )
+    if bottleneck_last_date and s > bottleneck_last_date:
+        return False, (
+            f'起始日期 {start_date} 晚于可用数据范围。'
+            f'ETF {bottleneck_last_code} 数据只到 {bottleneck_last_date.strftime("%Y/%m/%d")}。'
+        )
+    return True, None
+
+
 def fetch_etf_history(code, include_realtime=False):
     """通过新浪财经接口获取 ETF 历史日线数据。
 
@@ -259,6 +319,12 @@ def momentum_backtest(request):
                     "message": f"获取 ETF {code} 历史数据失败: {str(e)}"
                 }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+        # 校验回测期是否落在所有 ETF 的可用数据范围内
+        ok, err = validate_date_range(etf_history_dict, start_date, end_date)
+        if not ok:
+            return Response({"code": 400, "message": err},
+                            status=status.HTTP_400_BAD_REQUEST)
+
         # 获取ETF名称
         etf_names = fetch_etf_names(etf_codes)
 
@@ -339,6 +405,12 @@ def momentum_optimize(request):
             except Exception as e:
                 return Response({"code": 500, "message": f"获取 {code} 失败: {str(e)}"},
                                 status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        # 校验回测期是否落在所有 ETF 的可用数据范围内
+        ok, err = validate_date_range(etf_history_dict, start_date, end_date)
+        if not ok:
+            return Response({"code": 400, "message": err},
+                            status=status.HTTP_400_BAD_REQUEST)
 
         # 遍历组合
         results = []
