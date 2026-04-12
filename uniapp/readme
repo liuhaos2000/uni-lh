@@ -1,3 +1,6 @@
 啓動websocket模擬服務
 node mock/mockWebSocketServer.js
 
+前端
+npm install  #安装uni-ui插件
+env.js  #需要修改后端访问地址
