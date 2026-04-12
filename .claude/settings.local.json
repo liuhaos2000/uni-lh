@@ -15,7 +15,8 @@
       "Bash(python -m py_compile bkapp/logic/momentum/decision.py)",
       "Bash(python -c ':*)",
       "Bash(docker exec unisv-django-1 python -c ':*)",
-      "Bash(pip freeze:*)"
+      "Bash(pip freeze:*)",
+      "Bash(xxd)"
     ]
   }
 }

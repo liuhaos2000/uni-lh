@@ -3,7 +3,7 @@
  *
  * - 自动拼接 BASE_URL
  * - 自动附带 Authorization: Bearer <token>
- * - 401 自动清理本地 token 并跳转登录页
+ * - 401 时自动用 refresh token 续期，续期失败才跳登录页
  */
 import ENV from '@/config/env.js'
 
@@ -45,15 +45,37 @@ const redirectToLogin = () => {
   }, 300)
 }
 
+// refresh token 续期（防止并发重复刷新）
+let refreshing = null
+
+function doRefresh() {
+  if (refreshing) return refreshing
+  const refresh = tokenStore.getRefresh()
+  if (!refresh) return Promise.reject()
+
+  refreshing = new Promise((resolve, reject) => {
+    uni.request({
+      url: `${ENV.API.BASE_URL}/auth/refresh/`,
+      method: 'POST',
+      header: { 'Content-Type': 'application/json' },
+      data: { refresh },
+      success: (res) => {
+        if (res.statusCode === 200 && res.data && res.data.access) {
+          tokenStore.set({ access: res.data.access })
+          resolve(res.data.access)
+        } else {
+          reject()
+        }
+      },
+      fail: () => reject(),
+    })
+  }).finally(() => { refreshing = null })
+
+  return refreshing
+}
+
 /**
  * 发起请求
- * @param {Object} options
- * @param {string} options.url        相对路径或绝对 URL
- * @param {string} [options.method]   GET/POST/...
- * @param {Object} [options.data]     body / query
- * @param {Object} [options.header]
- * @param {boolean} [options.auth=true]   是否需要携带 token（默认是）
- * @param {boolean} [options.silent=false] 401 时不跳转登录
  */
 export function request(options) {
   const {
@@ -64,6 +86,7 @@ export function request(options) {
     auth = true,
     silent = false,
     timeout = ENV.API.TIMEOUT,
+    _retried = false,
   } = options
 
   const fullUrl = /^https?:\/\//.test(url) ? url : `${ENV.API.BASE_URL}${url}`
@@ -81,6 +104,17 @@ export function request(options) {
       header: finalHeader,
       timeout,
       success: (res) => {
+        if (res.statusCode === 401 && auth && !_retried) {
+          // 尝试用 refresh token 续期
+          doRefresh().then((newToken) => {
+            // 用新 token 重试原请求
+            request({ ...options, _retried: true }).then(resolve).catch(reject)
+          }).catch(() => {
+            if (!silent) redirectToLogin()
+            reject({ code: 401, message: '未登录或登录已过期', res })
+          })
+          return
+        }
         if (res.statusCode === 401) {
           if (!silent) redirectToLogin()
           reject({ code: 401, message: '未登录或登录已过期', res })

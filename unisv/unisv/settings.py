@@ -179,7 +179,7 @@ from celery.schedules import crontab
 CELERY_BEAT_SCHEDULE = {
     "fetch_stock_spot_every_min": {
         "task": "bkapp.tasks.update_stock_data.update_stock_data",
-        "schedule": 60,   # 每 60 秒執行一次
+        "schedule": 600,   # 每 600 秒執行一次
     },
     "momentum_daily_signal": {
         "task": "bkapp.tasks.momentum_signal.run_momentum_signals",

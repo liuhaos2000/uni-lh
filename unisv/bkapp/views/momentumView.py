@@ -19,38 +19,121 @@ from ..utils.usage import (
 )
 
 
+ETF_NAME_DICT = {
+    # 黄金 / 商品
+    '518880': '黄金ETF华安',
+    '518800': '黄金基金',
+    '159934': '黄金ETF',
+    '159937': '博时黄金',
+    '159812': '黄金ETF基金',
+    '518660': '金ETF',
+    # 宽基
+    '510300': '沪深300ETF',
+    '510500': '中证500ETF',
+    '510050': '上证50ETF',
+    '159915': '创业板ETF',
+    '159901': '深100ETF',
+    '588000': '科创50ETF',
+    '588080': '科创板50ETF',
+    '560010': '中证2000ETF',
+    '159845': '中证2000ETF基金',
+    '159922': '中证500ETF基金',
+    '510330': '沪深300',
+    '159919': '沪深300ETF基金',
+    # 跨境 / 海外
+    '513100': '纳指ETF',
+    '513300': '标普ETF',
+    '513500': '标普500ETF',
+    '159941': '纳指ETF基金',
+    '164824': '印度基金LOF',
+    '513520': '日经ETF',
+    '513880': '日经225ETF',
+    '159866': '日经225',
+    '513030': '德国DAX',
+    '513080': '法国CAC40',
+    '159920': '恒生ETF',
+    '513060': '恒生医疗ETF',
+    '159792': '越南ETF',
+    '513660': '恒生科技ETF',
+    '513180': '恒生科技指数ETF',
+    '159605': '中概互联ETF',
+    '513050': '中概互联网ETF',
+    # 行业 / 主题
+    '512010': '医药ETF',
+    '512170': '医疗ETF',
+    '515030': '新能源车ETF',
+    '516160': '新能源ETF',
+    '515790': '光伏ETF',
+    '512480': '半导体ETF',
+    '159995': '芯片ETF',
+    '512760': '国泰芯片ETF',
+    '512690': '酒ETF',
+    '515880': '通信ETF',
+    '515050': '5GETF',
+    '512980': '传媒ETF',
+    '512800': '银行ETF',
+    '512070': '非银ETF',
+    '512200': '地产ETF',
+    '512580': '环保ETF',
+    '512660': '军工ETF',
+    '512400': '有色金属ETF',
+    '515220': '煤炭ETF',
+    '516780': '稀土ETF',
+    '159825': '农业ETF',
+    '512170': '医疗ETF',
+    '512880': '证券ETF',
+    '159869': '游戏ETF',
+    '159819': '人工智能ETF',
+    '515230': '软件ETF',
+    '512100': '中证1000ETF',
+    # 债券 / 货币
+    '511010': '国债ETF',
+    '511260': '十年国债ETF',
+    '511020': '活跃国债ETF',
+    '159972': '5年地方债ETF',
+    '511380': '可转债ETF',
+    '511880': '银华日利',
+    '511660': '货币ETF',
+    # 红利 / 价值
+    '510880': '红利ETF',
+    '159905': '深证红利ETF',
+    '563020': '中证红利低波',
+    '515180': '红利低波100ETF',
+}
+
+
 def fetch_etf_names(codes):
-    """通过新浪实时行情接口批量获取 ETF 名称。
-
-    Args:
-        codes: ETF代码列表，如 ['518880', '513100']
-
-    Returns:
-        dict: {code: name}，如 {'518880': '黄金ETF华安'}
-    """
-    symbols = [f'{_get_market_prefix(c)}{c}' for c in codes]
-    url = f'https://hq.sinajs.cn/list={",".join(symbols)}'
-    headers = {
-        'User-Agent': 'Mozilla/5.0',
-        'Referer': 'https://finance.sina.com.cn',
-    }
-
+    """查询 ETF 名称：优先静态字典，未命中的尝试新浪接口。"""
     names = {}
-    try:
-        r = http_requests.get(url, headers=headers, timeout=10)
-        for line in r.text.strip().split('\n'):
-            # var hq_str_sh518880="黄金ETF华安,..."
-            m = re.match(r'var hq_str_(\w+)="([^"]*)"', line.strip())
-            if m:
-                full_symbol = m.group(1)
-                code = full_symbol[2:]  # 去掉 sh/sz
-                fields = m.group(2).split(',')
-                if fields:
-                    names[code] = fields[0]
-    except Exception:
-        pass
+    missing = []
+    for c in codes:
+        if c in ETF_NAME_DICT:
+            names[c] = ETF_NAME_DICT[c]
+        else:
+            missing.append(c)
 
-    # 没取到名称的用代码兜底
+    # 字典里没有的，尝试新浪接口
+    if missing:
+        symbols = [f'{_get_market_prefix(c)}{c}' for c in missing]
+        url = f'https://hq.sinajs.cn/list={",".join(symbols)}'
+        headers = {
+            'User-Agent': 'Mozilla/5.0',
+            'Referer': 'https://finance.sina.com.cn',
+        }
+        try:
+            r = http_requests.get(url, headers=headers, timeout=5)
+            for line in r.text.strip().split('\n'):
+                m = re.match(r'var hq_str_(\w+)="([^"]*)"', line.strip())
+                if m:
+                    full_symbol = m.group(1)
+                    code = full_symbol[2:]
+                    fields = m.group(2).split(',')
+                    if fields and fields[0]:
+                        names[code] = fields[0]
+        except Exception:
+            pass
+
+    # 兜底：没取到的用代码本身
     for c in codes:
         if c not in names:
             names[c] = c

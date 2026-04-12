@@ -180,6 +180,12 @@
 
 		<!-- 回测结果区 -->
 		<view v-if="hasResult" class="result-section">
+			<view class="bt-section-box">
+			<view class="section-title-row" @click="btSectionOpen = !btSectionOpen">
+				<text class="section-title">回测结果</text>
+				<text class="fold-icon">{{ btSectionOpen ? '▼' : '▶' }}</text>
+			</view>
+			<view v-show="btSectionOpen">
 			<!-- 汇总信息 -->
 			<view class="summary-card">
 				<view class="summary-item">
@@ -197,8 +203,28 @@
 					</text>
 				</view>
 				<view class="summary-item">
+					<text class="summary-label">年化收益</text>
+					<text class="summary-value" :class="(summary.annualized_return || 0) >= 0 ? 'positive' : 'negative'">
+						{{ ((summary.annualized_return || 0) * 100).toFixed(2) }}%
+					</text>
+				</view>
+				<view class="summary-item">
 					<text class="summary-label">夏普比率</text>
 					<text class="summary-value">{{ summary.sharpe_ratio }}</text>
+				</view>
+				<view class="summary-item">
+					<text class="summary-label">最大回撤</text>
+					<text class="summary-value negative">
+						{{ (Math.abs(summary.max_drawdown || 0) * 100).toFixed(2) }}%
+					</text>
+				</view>
+				<view class="summary-item">
+					<text class="summary-label">Calmar</text>
+					<text class="summary-value">{{ summary.calmar_ratio || '-' }}</text>
+				</view>
+				<view class="summary-item">
+					<text class="summary-label">胜率</text>
+					<text class="summary-value">{{ ((summary.win_rate || 0) * 100).toFixed(1) }}%</text>
 				</view>
 				<view class="summary-item">
 					<text class="summary-label">交易次数</text>
@@ -270,6 +296,8 @@
 					</view>
 				</view>
 			</view>
+			</view><!-- v-show btSectionOpen 结束 -->
+			</view><!-- bt-section-box 结束 -->
 		</view>
 
 		<!-- 底部订阅操作栏 -->
@@ -377,6 +405,7 @@ const heatmapMetric = ref('composite')   // composite | sharpe | mdd | winrate |
 const sortKey = ref('sharpe_ratio')
 const sortDir = ref('desc')           // 'asc' | 'desc'
 const selectedRow = ref(null)
+const btSectionOpen = ref(true)       // 回测结果折叠
 const optSectionOpen = ref(true)      // 优化结果整体折叠
 const optTableOpen = ref(false)       // 详细表格折叠（默认收起）
 
@@ -1231,12 +1260,20 @@ onBeforeUnmount(() => {
 	margin-top: 8px;
 }
 
+.bt-section-box {
+	background: #fff;
+	border-radius: 8px;
+	padding: 10px;
+	margin-bottom: 8px;
+	box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+}
+
 .summary-card {
 	display: flex;
 	flex-wrap: wrap;
 	background: #fff;
 	border-radius: 8px;
-	padding: 12px 16px;
+	padding: 8px 10px;
 	margin-bottom: 12px;
 	box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
 }
@@ -1263,8 +1300,8 @@ onBeforeUnmount(() => {
 .chart-section {
 	background: #fff;
 	border-radius: 8px;
-	padding: 16px;
-	margin-bottom: 12px;
+	padding: 10px;
+	margin-bottom: 8px;
 	box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
 }
 
@@ -1469,10 +1506,10 @@ onBeforeUnmount(() => {
 	background: #fafbfc;
 	border: 1px solid #e8eaed;
 	border-radius: 8px;
-	padding: 10px 12px;
+	padding: 8px 10px;
 	display: flex;
 	flex-direction: column;
-	gap: 6px;
+	gap: 4px;
 	cursor: pointer;
 	transition: box-shadow 0.15s;
 }
