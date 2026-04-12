@@ -21,6 +21,8 @@ pip install akshare
 pip install django-cors-headers
 
 ■ 运行
+放env文件。改redis=localhost
+
 celery -A unisv worker -l INFO
 celery -A unisv beat -l INFO
 python manage.py runserver

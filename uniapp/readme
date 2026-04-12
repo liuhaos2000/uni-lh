@@ -2,5 +2,5 @@
 node mock/mockWebSocketServer.js
 
 前端
-npm install  #安装uni-ui插件
+npm install  #HB也要安装uni-ui插件，删除已有node——modules
 env.js  #需要修改后端访问地址
