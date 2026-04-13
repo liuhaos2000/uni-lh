@@ -151,6 +151,44 @@ def _get_market_prefix(code):
         return 'sz'
 
 
+def _forward_adjust(bars):
+    """前复权处理：检测除息跳空并修正历史价格。
+
+    除息特征：开盘价比前日收盘价低 >0.8%（跳空低开），
+    但当日收盘相对开盘持平或上涨（day_return >= -0.1%），
+    说明跳空是除息造成的，不是利空。
+
+    修正方式：计算复权因子 = 当日开盘价 / 前日收盘价，
+    将该日之前的所有 OHLC 乘以这个因子，使 K 线连续。
+    """
+    if len(bars) < 2:
+        return bars
+
+    adjusted = [row[:] for row in bars]
+
+    for i in range(1, len(adjusted)):
+        prev_close = adjusted[i - 1][4]
+        curr_open = adjusted[i][1]
+
+        if prev_close <= 0:
+            continue
+
+        gap = (curr_open - prev_close) / prev_close
+        curr_close = adjusted[i][4]
+        day_return = (curr_close - curr_open) / curr_open if curr_open > 0 else 0
+
+        # 除息判定：跳空低开 > 1.3%，且当日走势平稳（收盘≈开盘或更高）
+        if gap < -0.013 and day_return >= -0.001:
+            factor = curr_open / prev_close
+            for j in range(i):
+                adjusted[j][1] = round(adjusted[j][1] * factor, 4)
+                adjusted[j][2] = round(adjusted[j][2] * factor, 4)
+                adjusted[j][3] = round(adjusted[j][3] * factor, 4)
+                adjusted[j][4] = round(adjusted[j][4] * factor, 4)
+
+    return adjusted
+
+
 def _is_trade_day(d: date) -> bool:
     """判断给定日期是不是 A 股交易日（排除周末和法定节假日）。"""
     if d.weekday() >= 5:

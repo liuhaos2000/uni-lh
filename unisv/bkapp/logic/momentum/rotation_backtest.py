@@ -4,7 +4,8 @@ from .decision import decide_signal
 
 
 def run_rotation_backtest(etf_history_dict, start_date, end_date=None,
-                          initial_capital=1000000, lookback_n=25, rebalance_days=5):
+                          initial_capital=1000000, lookback_n=25, rebalance_days=5,
+                          ma_period=0):
     """执行动量轮动回测。
 
     Args:
@@ -92,8 +93,20 @@ def run_rotation_backtest(etf_history_dict, start_date, end_date=None,
 
         days_since_rebalance += 1
 
+        # 均线过滤：计算每个 ETF 当前价是否在 ma_period 日均线之上
+        above_ma = None
+        if ma_period > 0:
+            above_ma = {}
+            for code in etf_codes:
+                if idx >= ma_period - 1:
+                    ma_val = np.mean(etf_close_series[code][idx - ma_period + 1:idx + 1])
+                    above_ma[code] = etf_close[code][date] >= ma_val
+                else:
+                    above_ma[code] = True  # 数据不足时不过滤
+
         # 通过纯函数决策
-        signal = decide_signal(scores, holding_code, days_since_rebalance, rebalance_days)
+        signal = decide_signal(scores, holding_code, days_since_rebalance, rebalance_days,
+                               above_ma=above_ma)
         last_signal = signal
         last_scores = scores
 
@@ -188,6 +201,7 @@ def run_rotation_backtest(etf_history_dict, start_date, end_date=None,
         "end_date": trade_dates[-1] if trade_dates else start_date,
         "lookback_n": lookback_n,
         "rebalance_days": rebalance_days,
+        "ma_period": ma_period,
         "etf_codes": etf_codes,
     }
 
