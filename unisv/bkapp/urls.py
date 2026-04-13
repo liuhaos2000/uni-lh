@@ -13,6 +13,8 @@ from .views.skView import removeFromWatchlist
 from .views.momentumView import (
     momentum_backtest, momentum_optimize, etf_name_lookup, momentum_subscription,
 )
+from .views.meanrevView import meanrev_backtest, meanrev_optimize
+from .views.comboView import combo_backtest
 from .views.authView import (
     register, login, me, captcha, send_email_code, reset_password,
 )
@@ -35,6 +37,13 @@ urlpatterns = [
     path('momentum/optimize/', momentum_optimize),
     path('momentum/etf-names/', etf_name_lookup),
     path('momentum/subscription/', momentum_subscription),
+
+    #meanrev
+    path('meanrev/backtest/', meanrev_backtest),
+    path('meanrev/optimize/', meanrev_optimize),
+
+    #combo
+    path('combo/backtest/', combo_backtest),
 
     #mypage
     path('my/firststock/', get_user_first_stock),

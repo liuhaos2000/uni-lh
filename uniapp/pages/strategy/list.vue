@@ -24,8 +24,20 @@ const strategies = ref([
 	{
 		id: 'momentum_rotation',
 		name: '动量轮动策略',
-		description: '基于动量评分（N日涨幅×R²系数）在多个ETF间轮动，自动选择趋势最强的标的持仓',
+		description: '基于动量评分在多个ETF间轮动，自动选择趋势最强的标的持仓',
 		page: '/pages/strategy/momentum'
+	},
+	{
+		id: 'mean_reversion',
+		name: '均值回归策略',
+		description: '基于布林带/RSI信号，在ETF超卖时买入、回归均值时卖出，高抛低吸',
+		page: '/pages/strategy/meanrev'
+	},
+	{
+		id: 'combo',
+		name: '策略组合回测',
+		description: '将动量轮动与均值回归组合，按比例分配资金，对比单策略与组合的表现',
+		page: '/pages/strategy/combo'
 	}
 ])
 

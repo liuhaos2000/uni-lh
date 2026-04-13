@@ -20,7 +20,8 @@
       "Bash(git checkout:*)",
       "Bash(python3 -c \"print\\(int\\(''\\)\\)\")",
       "Bash(pip3 install:*)",
-      "Bash(/Users/lh01/22_codex/uni-lh/unisv/venv/bin/python3 -c ':*)"
+      "Bash(/Users/lh01/22_codex/uni-lh/unisv/venv/bin/python3 -c ':*)",
+      "Bash(grep -r \"method.*GET\" /Users/lh01/22_codex/uni-lh/uniapp/services/strategy/*.js)"
     ]
   }
 }

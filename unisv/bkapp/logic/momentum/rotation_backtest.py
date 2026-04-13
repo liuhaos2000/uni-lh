@@ -1,6 +1,7 @@
 import numpy as np
 from .momentum_score import calculate_momentum_score
 from .decision import decide_signal
+from ..common.metrics import build_summary
 
 
 def run_rotation_backtest(etf_history_dict, start_date, end_date=None,
@@ -148,26 +149,15 @@ def run_rotation_backtest(etf_history_dict, start_date, end_date=None,
         # 记录权益曲线
         equity_curve.append((date, round(equity, 2)))
 
-    # 回测结束，计算最终状态
-    final_equity = equity_curve[-1][1] if equity_curve else initial_capital
-    total_return = (final_equity - initial_capital) / initial_capital
-
-    # 计算夏普比率（年化，无风险利率按2.5%）
-    sharpe_ratio = _calculate_sharpe(equity_curve, risk_free_rate=0.025)
-
-    # 最大回撤
-    max_drawdown = _calculate_max_drawdown(equity_curve)
-
-    # Calmar 比率（年化收益 / 最大回撤）
-    annualized_return = _calculate_annualized_return(equity_curve, initial_capital)
-    calmar_ratio = round(annualized_return / abs(max_drawdown), 4) if max_drawdown < 0 else 0.0
-
-    # 胜率（已平仓交易里赚钱的占比）
-    if trade_records:
-        wins = sum(1 for t in trade_records if t.get('profitRate', 0) > 0)
-        win_rate = round(wins / len(trade_records), 4)
-    else:
-        win_rate = 0.0
+    # 回测结束，构建 summary
+    summary = build_summary(equity_curve, trade_records, initial_capital, extra={
+        "start_date": trade_dates[0] if trade_dates else start_date,
+        "end_date": trade_dates[-1] if trade_dates else start_date,
+        "lookback_n": lookback_n,
+        "rebalance_days": rebalance_days,
+        "ma_period": ma_period,
+        "etf_codes": etf_codes,
+    })
 
     # 当前持仓信息
     current_holding = None
@@ -187,24 +177,6 @@ def run_rotation_backtest(etf_history_dict, start_date, end_date=None,
             "holdingDays": trade_dates.index(last_date) - trade_dates.index(buy_date) if buy_date in trade_dates else 0,
         }
 
-    summary = {
-        "initial_capital": initial_capital,
-        "final_equity": final_equity,
-        "total_return": round(total_return, 4),
-        "annualized_return": annualized_return,
-        "sharpe_ratio": sharpe_ratio,
-        "max_drawdown": max_drawdown,
-        "calmar_ratio": calmar_ratio,
-        "win_rate": win_rate,
-        "total_trades": len(trade_records),
-        "start_date": trade_dates[0] if trade_dates else start_date,
-        "end_date": trade_dates[-1] if trade_dates else start_date,
-        "lookback_n": lookback_n,
-        "rebalance_days": rebalance_days,
-        "ma_period": ma_period,
-        "etf_codes": etf_codes,
-    }
-
     return {
         "equity_curve": equity_curve,
         "momentum_curves": momentum_curves,
@@ -217,57 +189,3 @@ def run_rotation_backtest(etf_history_dict, start_date, end_date=None,
     }
 
 
-def _calculate_sharpe(equity_curve, risk_free_rate=0.025):
-    """根据权益曲线计算年化夏普比率。
-
-    Args:
-        equity_curve: [(date, equity), ...]
-        risk_free_rate: 年化无风险利率，默认2.5%
-
-    Returns:
-        float: 年化夏普比率，数据不足时返回 0
-    """
-    if len(equity_curve) < 2:
-        return 0.0
-
-    equities = np.array([e[1] for e in equity_curve], dtype=float)
-    # 日收益率
-    daily_returns = np.diff(equities) / equities[:-1]
-
-    if len(daily_returns) == 0 or np.std(daily_returns) == 0:
-        return 0.0
-
-    # 年化（约242个交易日）
-    trading_days = 242
-    daily_rf = risk_free_rate / trading_days
-    excess_returns = daily_returns - daily_rf
-
-    sharpe = np.mean(excess_returns) / np.std(excess_returns) * np.sqrt(trading_days)
-    return round(float(sharpe), 4)
-
-
-def _calculate_max_drawdown(equity_curve):
-    """计算最大回撤（以负数返回，例如 -0.225 表示 -22.5%）。"""
-    if len(equity_curve) < 2:
-        return 0.0
-    equities = np.array([e[1] for e in equity_curve], dtype=float)
-    running_max = np.maximum.accumulate(equities)
-    drawdowns = (equities - running_max) / running_max
-    return round(float(drawdowns.min()), 4)
-
-
-def _calculate_annualized_return(equity_curve, initial_capital):
-    """根据权益曲线计算年化收益率。"""
-    if len(equity_curve) < 2:
-        return 0.0
-    final = equity_curve[-1][1]
-    total_return = (final - initial_capital) / initial_capital
-    days = len(equity_curve)
-    years = days / 242.0
-    if years <= 0:
-        return 0.0
-    try:
-        ann = (1 + total_return) ** (1 / years) - 1
-    except (ValueError, ZeroDivisionError):
-        return 0.0
-    return round(float(ann), 4)

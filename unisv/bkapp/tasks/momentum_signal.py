@@ -16,7 +16,7 @@ from ..models.momentum_watch import MomentumWatch
 from ..logic.momentum.rotation_backtest import run_rotation_backtest
 from ..logic.momentum.feishu import send_feishu_card, build_signal_card
 from ..logic.momentum.email_push import send_signal_email
-from ..views.momentumView import fetch_etf_history, fetch_etf_names
+from ..logic.common.data_fetcher import fetch_etf_history, fetch_etf_names
 
 logger = logging.getLogger(__name__)
 

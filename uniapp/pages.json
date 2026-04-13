@@ -47,6 +47,18 @@
 			}
 		},
 		{
+			"path": "pages/strategy/meanrev",
+			"style": {
+				"navigationBarTitleText": "金点策略 · 均值回归"
+			}
+		},
+		{
+			"path": "pages/strategy/combo",
+			"style": {
+				"navigationBarTitleText": "金点策略 · 组合回测"
+			}
+		},
+		{
 			"path": "pages/auth/login",
 			"style": {
 				"navigationBarTitleText": "登录"
