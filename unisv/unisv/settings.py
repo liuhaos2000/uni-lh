@@ -185,6 +185,10 @@ CELERY_BEAT_SCHEDULE = {
         "task": "bkapp.tasks.momentum_signal.run_momentum_signals",
         "schedule": crontab(hour=9, minute=0, day_of_week="mon-fri"),
     },
+    "meanrev_daily_signal": {
+        "task": "bkapp.tasks.meanrev_signal.run_meanrev_signals",
+        "schedule": crontab(hour=9, minute=0, day_of_week="mon-fri"),
+    },
 }
 
 # CORS 设置
