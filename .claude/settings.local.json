@@ -23,7 +23,17 @@
       "Bash(/Users/lh01/22_codex/uni-lh/unisv/venv/bin/python3 -c ':*)",
       "Bash(grep -r \"method.*GET\" /Users/lh01/22_codex/uni-lh/uniapp/services/strategy/*.js)",
       "Bash(python manage.py makemigrations bkapp --name meanrev_watch)",
-      "Bash(grep -n \"const requireLogin\" /Users/lh01/22_codex/uni-lh/uniapp/pages/strategy/*.vue)"
+      "Bash(grep -n \"const requireLogin\" /Users/lh01/22_codex/uni-lh/uniapp/pages/strategy/*.vue)",
+      "Bash(python3 -c \"from PIL import Image; print\\('ok'\\)\")",
+      "Bash(ls /Users/lh01/22_codex/uni-lh/uniapp/static/tabbar/*.svg)",
+      "Bash(node -e \"try { require\\('canvas'\\); console.log\\('canvas'\\) } catch\\(e\\) { try { require\\('sharp'\\); console.log\\('sharp'\\) } catch\\(e2\\) { console.log\\('none'\\) } }\")",
+      "Bash(npm install:*)",
+      "Bash(node -e ':*)",
+      "Bash(npm uninstall:*)",
+      "Bash(node gen_png.js)",
+      "Bash(ls -la /Users/lh01/22_codex/uni-lh/uniapp/static/tabbar/*.png)",
+      "Bash(ls -la *.png)",
+      "Bash(node gen_font.js)"
     ]
   }
 }

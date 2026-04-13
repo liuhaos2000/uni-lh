@@ -94,25 +94,46 @@
 		"selectedColor": "#007aff",
 		"borderStyle": "black",
 		"backgroundColor": "#ffffff",
+		"iconfontSrc": "static/tabbar/tabbar-icons.ttf",
 		"list": [{
 			"pagePath": "pages/index/index",
-			"iconPath": "static/image/icon_component.png",
-			"selectedIconPath": "static/image/icon_component_HL.png",
+			"iconfont": {
+				"text": "\uE001",
+				"selectedText": "\uE001",
+				"fontSize": "22px",
+				"color": "#7A7E83",
+				"selectedColor": "#007aff"
+			},
 			"text": "首页"
 		}, {
 			"pagePath": "pages/skfind/skfind",
-			"iconPath": "static/image/icon_API.png",
-			"selectedIconPath": "static/image/icon_API_HL.png",
+			"iconfont": {
+				"text": "\uE002",
+				"selectedText": "\uE002",
+				"fontSize": "22px",
+				"color": "#7A7E83",
+				"selectedColor": "#007aff"
+			},
 			"text": "查找"
 		},{
 			"pagePath": "pages/strategy/list",
-			"iconPath": "static/image/icon_API.png",
-			"selectedIconPath": "static/image/icon_API_HL.png",
+			"iconfont": {
+				"text": "\uE003",
+				"selectedText": "\uE003",
+				"fontSize": "22px",
+				"color": "#7A7E83",
+				"selectedColor": "#007aff"
+			},
 			"text": "策略"
 		},{
 			"pagePath": "pages/skmy/skmy",
-			"iconPath": "static/image/icon_API.png",
-			"selectedIconPath": "static/image/icon_API_HL.png",
+			"iconfont": {
+				"text": "\uE004",
+				"selectedText": "\uE004",
+				"fontSize": "22px",
+				"color": "#7A7E83",
+				"selectedColor": "#007aff"
+			},
 			"text": "我的"
 		}]
 	},

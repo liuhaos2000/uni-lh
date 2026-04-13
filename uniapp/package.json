@@ -2,6 +2,9 @@
   "dependencies": {
     "@dcloudio/uni-ui": "^1.5.11",
     "echarts": "^6.0.0",
+    "svg2ttf": "^6.0.3",
+    "svgicons2svgfont": "^11.0.0",
+    "ttf2woff2": "^8.0.1",
     "ws": "^8.18.3"
   }
 }
