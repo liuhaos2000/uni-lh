@@ -70,14 +70,14 @@
     },
     "vueVersion" : "3",
     "h5": {
-    "router": {
+        "router": {
             "mode": "history",
-            "base": "./"
+            "base": "/"
         },
         "devServer": {
             "host": "0.0.0.0",
             "port": 5173,
             "https": false
         }
-  }
+    }
 }
