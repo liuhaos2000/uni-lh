@@ -325,6 +325,10 @@
 			</view><!-- v-show btSectionOpen 结束 -->
 			</view><!-- bt-section-box 结束 -->
 		</view>
+		<!-- 底部订阅操作栏 -->
+		<view class="goods-carts goods-carts2">
+			<uni-goods-nav :options="navOptions" :buttonGroup="subBtnGroup" @buttonClick="onSubBtnClick" />
+		</view>
 	</view>
 </template>
 
@@ -333,8 +337,14 @@ import { ref, computed, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import getMeanrevBacktest from '@/services/strategy/meanrevBacktest.js'
 import getMeanrevOptimize from '@/services/strategy/meanrevOptimize.js'
 import etfNameLookup from '@/services/strategy/etfNameLookup.js'
+import {
+	getSubscription,
+	saveSubscription,
+	deleteSubscription,
+} from '@/services/strategy/meanrevSubscription.js'
 import userStore from '@/stores/user.js'
 import { handleVipBlocked } from '@/utils/vipTip.js'
+import uniGoodsNav from '@dcloudio/uni-ui/lib/uni-goods-nav/uni-goods-nav.vue'
 
 const STORAGE_KEY = 'meanrev_params'
 
@@ -432,6 +442,24 @@ const btSectionOpen = ref(true)
 const optSectionOpen = ref(true)
 const optTableOpen = ref(false)
 
+// 订阅状态
+const subscribed = ref(false)
+const subscribing = ref(false)
+
+// 底部操作栏
+const navOptions = ref([])
+const subBtnGroup = computed(() => {
+	if (subscribed.value) {
+		return [
+			{ text: '取消订阅', backgroundColor: '#bbb', color: '#fff' },
+			{ text: '更新参数', backgroundColor: '#ffa200', color: '#fff' },
+		]
+	}
+	return [
+		{ text: '订阅每日飞书推送', backgroundColor: '#ffa200', color: '#fff' },
+	]
+})
+
 // 图表实例
 let deviationChart = null
 let equityChart = null
@@ -470,13 +498,24 @@ onMounted(async () => {
 			if (!item.name && names[item.code]) item.name = names[item.code]
 		})
 	}
+	// 查询订阅状态
+	if (userStore.isLoggedIn.value) {
+		try {
+			const res = await getSubscription()
+			if (res && res.code === 0 && res.data && res.data.subscribed) {
+				subscribed.value = true
+			}
+		} catch (e) {
+			// 忽略
+		}
+	}
 })
 
 const requireLogin = () => {
 	if (userStore.isLoggedIn.value) return true
 	uni.showModal({
 		title: '需要登录',
-		content: '回测功能需要先登录，是否前往登录？',
+		content: '订阅每日推送需要先登录，是否前往登录？',
 		confirmText: '去登录',
 		success: (r) => {
 			if (r.confirm) {
@@ -485,6 +524,70 @@ const requireLogin = () => {
 		},
 	})
 	return false
+}
+
+const doSubscribe = async () => {
+	if (subscribing.value) return
+	if (!requireLogin()) return
+	subscribing.value = true
+	try {
+		const res = await saveSubscription({
+			etf_codes: etfList.value.map(e => e.code),
+			signal_type: signalType.value,
+			period: Number(period.value),
+			num_std: Number(numStd.value),
+			oversold: Number(oversold.value),
+			overbought: 70,
+			stop_loss: Number(stopLoss.value),
+			rebalance_days: Number(rebalanceDays.value),
+			initial_capital: Number(initialCapital.value),
+		})
+		if (handleVipBlocked(res)) return
+		if (res && res.code === 0) {
+			subscribed.value = true
+			uni.showToast({ title: res.message || '订阅成功', icon: 'success' })
+		} else {
+			uni.showToast({ title: (res && res.message) || '订阅失败', icon: 'none' })
+		}
+	} catch (e) {
+		uni.showToast({ title: '订阅请求失败', icon: 'none' })
+	} finally {
+		subscribing.value = false
+	}
+}
+
+const doUnsubscribe = () => {
+	if (subscribing.value) return
+	if (!requireLogin()) return
+	uni.showModal({
+		title: '取消订阅',
+		content: '确定不再接收每日均值回归信号推送？',
+		success: async (r) => {
+			if (!r.confirm) return
+			subscribing.value = true
+			try {
+				const res = await deleteSubscription()
+				if (res && res.code === 0) {
+					subscribed.value = false
+					uni.showToast({ title: '已取消订阅', icon: 'success' })
+				}
+			} catch (e) {
+				uni.showToast({ title: '取消失败', icon: 'none' })
+			} finally {
+				subscribing.value = false
+			}
+		},
+	})
+}
+
+const onSubBtnClick = (e) => {
+	const text = e && e.content && e.content.text
+	if (!text) return
+	if (text === '取消订阅') {
+		doUnsubscribe()
+	} else {
+		doSubscribe()
+	}
 }
 
 const removeEtf = (index) => {
@@ -1601,5 +1704,27 @@ onBeforeUnmount(() => {
 .opt-stat-val {
 	color: #5470c6;
 	font-weight: 600;
+}
+
+.goods-carts {
+	display: flex;
+	flex-direction: column;
+	position: fixed;
+	left: 0;
+	right: 0;
+	/* #ifdef H5 */
+	left: var(--window-left);
+	right: var(--window-right);
+	/* #endif */
+	bottom: 0;
+	z-index: 99;
+}
+
+.goods-carts2 ::v-deep .uni-tab__cart-sub-left {
+	display: none;
+}
+
+.goods-carts2 ::v-deep .uni-tab__cart-sub-right {
+	flex: 1;
 }
 </style>

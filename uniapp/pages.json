@@ -59,6 +59,18 @@
 			}
 		},
 		{
+			"path": "pages/skmy/watchlist",
+			"style": {
+				"navigationBarTitleText": "我的关注"
+			}
+		},
+		{
+			"path": "pages/skmy/subscriptions",
+			"style": {
+				"navigationBarTitleText": "我的订阅"
+			}
+		},
+		{
 			"path": "pages/auth/login",
 			"style": {
 				"navigationBarTitleText": "登录"

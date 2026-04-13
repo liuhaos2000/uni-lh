@@ -5,7 +5,7 @@ from rest_framework_simplejwt import views as jwt_views
 
 from .views.strategiesView import list_strategies
 from .views.strategies2View import list_strategies2
-from .views.userView import get_user_first_stock
+from .views.userView import get_user_first_stock, get_user_subscriptions
 from .views.skView import get_sk_k
 from .views.skView import get_huice
 from .views.skView import addToWatchlist
@@ -13,7 +13,7 @@ from .views.skView import removeFromWatchlist
 from .views.momentumView import (
     momentum_backtest, momentum_optimize, etf_name_lookup, momentum_subscription,
 )
-from .views.meanrevView import meanrev_backtest, meanrev_optimize
+from .views.meanrevView import meanrev_backtest, meanrev_optimize, meanrev_subscription
 from .views.comboView import combo_backtest
 from .views.authView import (
     register, login, me, captcha, send_email_code, reset_password,
@@ -41,12 +41,14 @@ urlpatterns = [
     #meanrev
     path('meanrev/backtest/', meanrev_backtest),
     path('meanrev/optimize/', meanrev_optimize),
+    path('meanrev/subscription/', meanrev_subscription),
 
     #combo
     path('combo/backtest/', combo_backtest),
 
     #mypage
     path('my/firststock/', get_user_first_stock),
+    path('my/subscriptions/', get_user_subscriptions),
 
     #auth
     path('auth/captcha/', captcha),

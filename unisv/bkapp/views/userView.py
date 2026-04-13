@@ -6,6 +6,8 @@ from django.conf import settings
 
 from ..models.watchlists import Watchlist
 from ..models.watchlist_stocks import WatchlistStock
+from ..models.momentum_watch import MomentumWatch
+from ..models.meanrev_watch import MeanrevWatch
 import requests
 from ..global_data import get_allskname_fromapi_global
 
@@ -123,4 +125,86 @@ def get_stocks_from_codes(stock_codes):
             print(f"Error processing data for {code}: {e}")
 
     return stock_data
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_user_subscriptions(request):
+    """获取当前用户的所有策略订阅。
+
+    Returns:
+        {
+            "code": 0,
+            "data": {
+                "subscriptions": [
+                    {
+                        "strategy": "momentum",
+                        "strategy_name": "动量轮动",
+                        "params": {...},
+                        "enabled": true,
+                        "updated_at": "..."
+                    },
+                    ...
+                ]
+            }
+        }
+    """
+    user = request.user
+    subscriptions = []
+
+    # 动量轮动订阅
+    try:
+        momentum = MomentumWatch.objects.filter(user=user).first()
+        if momentum:
+            subscriptions.append({
+                'strategy': 'momentum',
+                'strategy_name': '动量轮动',
+                'params': {
+                    'etf_codes': momentum.etf_codes,
+                    'lookback_n': momentum.lookback_n,
+                    'rebalance_days': momentum.rebalance_days,
+                    'initial_capital': momentum.initial_capital,
+                },
+                'enabled': momentum.enabled,
+                'created_at': momentum.created_at.isoformat() if momentum.created_at else None,
+                'updated_at': momentum.updated_at.isoformat() if momentum.updated_at else None,
+            })
+    except Exception:
+        pass
+
+    # 均值回归订阅
+    try:
+        meanrev = MeanrevWatch.objects.filter(user=user).first()
+        if meanrev:
+            signal_label = '布林带' if meanrev.signal_type == 'bollinger' else 'RSI'
+            params = {
+                'etf_codes': meanrev.etf_codes,
+                'signal_type': meanrev.signal_type,
+                'signal_type_label': signal_label,
+                'period': meanrev.period,
+                'rebalance_days': meanrev.rebalance_days,
+                'stop_loss': meanrev.stop_loss,
+                'initial_capital': meanrev.initial_capital,
+            }
+            if meanrev.signal_type == 'bollinger':
+                params['num_std'] = meanrev.num_std
+            else:
+                params['oversold'] = meanrev.oversold
+                params['overbought'] = meanrev.overbought
+
+            subscriptions.append({
+                'strategy': 'meanrev',
+                'strategy_name': f'均值回归({signal_label})',
+                'params': params,
+                'enabled': meanrev.enabled,
+                'created_at': meanrev.created_at.isoformat() if meanrev.created_at else None,
+                'updated_at': meanrev.updated_at.isoformat() if meanrev.updated_at else None,
+            })
+    except Exception:
+        pass
+
+    return Response({
+        "code": 0,
+        "data": {"subscriptions": subscriptions},
+    })
 

@@ -7,6 +7,7 @@ from .models import (
 )
 from .models.users2 import User2
 from .models.momentum_watch import MomentumWatch
+from .models.meanrev_watch import MeanrevWatch
 
 
 @admin.register(Todo)
@@ -122,6 +123,19 @@ class MomentumWatchAdmin(admin.ModelAdmin):
         'initial_capital', 'enabled', 'updated_at',
     )
     list_filter = ('enabled', 'created_at')
+    search_fields = ('user__username', 'user__email')
+    list_editable = ('enabled',)
+    autocomplete_fields = ('user',)
+    readonly_fields = ('created_at', 'updated_at')
+
+
+@admin.register(MeanrevWatch)
+class MeanrevWatchAdmin(admin.ModelAdmin):
+    list_display = (
+        'id', 'user', 'etf_codes', 'signal_type', 'period',
+        'rebalance_days', 'initial_capital', 'enabled', 'updated_at',
+    )
+    list_filter = ('enabled', 'signal_type', 'created_at')
     search_fields = ('user__username', 'user__email')
     list_editable = ('enabled',)
     autocomplete_fields = ('user',)

@@ -21,7 +21,9 @@
       "Bash(python3 -c \"print\\(int\\(''\\)\\)\")",
       "Bash(pip3 install:*)",
       "Bash(/Users/lh01/22_codex/uni-lh/unisv/venv/bin/python3 -c ':*)",
-      "Bash(grep -r \"method.*GET\" /Users/lh01/22_codex/uni-lh/uniapp/services/strategy/*.js)"
+      "Bash(grep -r \"method.*GET\" /Users/lh01/22_codex/uni-lh/uniapp/services/strategy/*.js)",
+      "Bash(python manage.py makemigrations bkapp --name meanrev_watch)",
+      "Bash(grep -n \"const requireLogin\" /Users/lh01/22_codex/uni-lh/uniapp/pages/strategy/*.vue)"
     ]
   }
 }

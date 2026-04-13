@@ -1,5 +1,5 @@
 <template>
-	<view class="uni-container">
+	<view class="my-page">
 		<!-- 顶部用户信息条 -->
 		<view class="user-bar">
 			<uni-row class="user-row">
@@ -16,9 +16,6 @@
 						<view>等級：{{ userInfo.userLevel || '普通' }}</view>
 						<view v-if="userInfo.is_vip">VIP 用户</view>
 						<view v-else>免费回测：{{ userInfo.backtest_count || 0 }} / {{ userInfo.backtest_quota || 20 }}</view>
-						<view class="user-actions">
-							<text class="user-action-btn logout-btn" @click="onLogout">退出登录</text>
-						</view>
 					</template>
 					<!-- 未登录 -->
 					<template v-else>
@@ -32,24 +29,37 @@
 			</uni-row>
 		</view>
 
-		<!-- 自选股表格（仅登录后展示） -->
-		<view v-if="isLoggedIn" style="padding: 10px 0 10px 0;">
-			<view class="uni-container">
-				<uni-table ref="table" :loading="loading" border stripe emptyText="暂无更多数据">
-					<uni-tr>
-						<uni-th width="80" align="center">代碼</uni-th>
-						<uni-th width="80" align="center">名稱</uni-th>
-						<uni-th width="20" align="center">價格</uni-th>
-						<uni-th width="20" align="center">漲跌</uni-th>
-					</uni-tr>
-					<uni-tr v-for="(item, index) in tableData" :key="index" @click="handleRowClick(item)"
-						:class="{ 'positive-movement': item.movement > 0, 'negative-movement': item.movement < 0 }">
-						<uni-td>{{ item.skId }}</uni-td>
-						<uni-td>{{ item.skName }}</uni-td>
-						<uni-td align="right">{{ item.price }}</uni-td>
-						<uni-td align="right">{{ item.movement }}</uni-td>
-					</uni-tr>
-				</uni-table>
+		<!-- 功能入口（仅登录后展示） -->
+		<view v-if="isLoggedIn" class="menu-section">
+			<view class="menu-card" @click="goWatchlist">
+				<view class="menu-icon-wrap icon-bg-amber">
+					<text class="menu-icon">&#9733;</text>
+				</view>
+				<view class="menu-content">
+					<text class="menu-title">我的关注</text>
+					<text class="menu-desc">查看自选股列表，点击可查看股票详情</text>
+				</view>
+				<text class="menu-arrow">></text>
+			</view>
+			<view class="menu-card" @click="goSubscriptions">
+				<view class="menu-icon-wrap icon-bg-green">
+					<text class="menu-icon">&#9993;</text>
+				</view>
+				<view class="menu-content">
+					<text class="menu-title">我的订阅</text>
+					<text class="menu-desc">查看已订阅的策略推送，管理订阅参数</text>
+				</view>
+				<text class="menu-arrow">></text>
+			</view>
+			<view class="menu-card menu-card-logout" @click="onLogout">
+				<view class="menu-icon-wrap icon-bg-grey">
+					<text class="menu-icon">&#10140;</text>
+				</view>
+				<view class="menu-content">
+					<text class="menu-title menu-title-muted">退出登录</text>
+					<text class="menu-desc">退出当前账号</text>
+				</view>
+				<text class="menu-arrow">></text>
 			</view>
 		</view>
 	</view>
@@ -58,12 +68,7 @@
 <script setup>
 import { ref, computed } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
-import getMy from '@/services/sk/getMy.js'
 import userStore from '@/stores/user.js'
-import uniTable from '@dcloudio/uni-ui/lib/uni-table/uni-table.vue'
-import uniTr from '@dcloudio/uni-ui/lib/uni-tr/uni-tr.vue'
-import uniTh from '@dcloudio/uni-ui/lib/uni-th/uni-th.vue'
-import uniTd from '@dcloudio/uni-ui/lib/uni-td/uni-td.vue'
 import uniRow from '@dcloudio/uni-ui/lib/uni-row/uni-row.vue'
 import uniCol from '@dcloudio/uni-ui/lib/uni-col/uni-col.vue'
 
@@ -81,26 +86,6 @@ const userInfo = ref({
 	backtest_quota: 20,
 })
 
-const loading = ref(false)
-const tableData = ref([])
-
-const loadTableData = async () => {
-	if (!isLoggedIn.value) return
-	try {
-		loading.value = true
-		const result = await getMy()
-		if (result && result.code === 0 && result.data) {
-			tableData.value = result.data.userSkList || []
-			userInfo.value = { ...userInfo.value, ...result.data }
-		}
-	} catch (e) {
-		console.error('表格数据加载失败', e)
-	} finally {
-		loading.value = false
-	}
-}
-
-// tabBar 页面不会销毁，每次进入都用 onShow 刷新
 onShow(async () => {
 	const u = userStore.state.user
 	if (u) {
@@ -112,7 +97,6 @@ onShow(async () => {
 			backtest_quota: u.backtest_quota,
 		}
 	} else {
-		// 退出登录后清空
 		userInfo.value = {
 			userName: '',
 			userImage: '',
@@ -122,14 +106,20 @@ onShow(async () => {
 			backtest_count: 0,
 			backtest_quota: 20,
 		}
-		tableData.value = []
 	}
-	await loadTableData()
 })
 
-const handleRowClick = (item) => {
+const goWatchlist = () => {
 	uni.navigateTo({
-		url: `/pages/sk/sk?skId=${encodeURIComponent(item.skId)}&skName=${encodeURIComponent(item.skName)}`,
+		url: '/pages/skmy/watchlist',
+		animationType: 'slide-in-right',
+		animationDuration: 200,
+	})
+}
+
+const goSubscriptions = () => {
+	uni.navigateTo({
+		url: '/pages/skmy/subscriptions',
 		animationType: 'slide-in-right',
 		animationDuration: 200,
 	})
@@ -145,7 +135,6 @@ const onLogout = () => {
 		success: (r) => {
 			if (!r.confirm) return
 			userStore.logout()
-			tableData.value = []
 			userInfo.value = {
 				userName: '',
 				userImage: '',
@@ -162,14 +151,19 @@ const onLogout = () => {
 
 <style>
 .user-bar {
-	padding: 10px;
+	padding: 16px 10px;
 	background-color: #94bcff;
 }
-.user-row {
-	min-height: 26vmin;
+.user-bar .uni-row {
+	width: 100%;
+	display: flex;
+	align-items: center;
 }
 .user-col {
 	height: 100%;
+	display: flex;
+	align-items: center;
+	justify-content: center;
 }
 .user-info {
 	display: flex;
@@ -182,14 +176,10 @@ const onLogout = () => {
 	gap: 4px;
 }
 .user-image {
-	display: flex;
-	flex-direction: column;
-	justify-content: center;
-	align-items: flex-start;
 	height: 20vmin;
 	width: 20vmin;
-	padding: 12px;
 	border-radius: 50%;
+	object-fit: cover;
 }
 .not-login-tip {
 	font-size: 16px;
@@ -209,21 +199,90 @@ const onLogout = () => {
 	font-size: 13px;
 	font-weight: 500;
 }
-.logout-btn {
-	background: rgba(255, 255, 255, 0.2);
-	color: #fff;
+
+.menu-section {
+	padding: 16px 12px;
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
 }
 
-.positive-movement {
-	color: #D90214;
+.menu-card {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	padding: 16px;
+	background-color: #fff;
+	border-radius: 10px;
+	box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
 }
-.negative-movement {
-	color: #54ac54;
+
+.menu-card-logout {
+	margin-top: 12px;
 }
-.positive-movement td {
-	color: inherit !important;
+
+.menu-icon-wrap {
+	width: 44px;
+	height: 44px;
+	border-radius: 10px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	margin-right: 14px;
+	flex-shrink: 0;
 }
-.negative-movement td {
-	color: inherit !important;
+
+.icon-bg-amber {
+	background: #fff8e1;
+}
+.icon-bg-amber .menu-icon {
+	color: #f5a623;
+}
+
+.icon-bg-green {
+	background: #e8f5e9;
+}
+.icon-bg-green .menu-icon {
+	color: #43a047;
+}
+
+.icon-bg-grey {
+	background: #f5f5f5;
+}
+.icon-bg-grey .menu-icon {
+	color: #999;
+}
+
+.menu-icon {
+	font-size: 22px;
+}
+
+.menu-content {
+	flex: 1;
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+
+.menu-title {
+	font-size: 16px;
+	font-weight: 600;
+	color: #333;
+}
+
+.menu-title-muted {
+	color: #999;
+}
+
+.menu-desc {
+	font-size: 13px;
+	color: #999;
+	line-height: 1.4;
+}
+
+.menu-arrow {
+	font-size: 18px;
+	color: #ccc;
+	padding-left: 8px;
 }
 </style>

@@ -9,8 +9,10 @@ from ..logic.meanrev.meanrev_backtest import run_meanrev_backtest
 from ..logic.common.data_fetcher import (
     fetch_etf_history, fetch_etf_names, validate_date_range,
 )
+from ..models.meanrev_watch import MeanrevWatch
 from ..utils.usage import (
-    check_and_inc_backtest, QuotaExceeded, VIP_INFO,
+    check_and_inc_backtest, require_vip,
+    QuotaExceeded, VipRequired, VIP_INFO,
 )
 
 
@@ -397,3 +399,90 @@ def _attach_composite_score(results):
             composite *= 0.8
 
         row['composite_score'] = round(composite, 4)
+
+
+@api_view(['GET', 'POST', 'DELETE'])
+@permission_classes([IsAuthenticated])
+def meanrev_subscription(request):
+    """均值回归信号订阅管理（需要登录）。
+
+    GET    返回当前用户的订阅
+    POST   body: {etf_codes, signal_type, period, num_std, oversold, overbought, stop_loss, rebalance_days, initial_capital}
+    DELETE 取消订阅
+    """
+    user = request.user
+
+    if request.method == 'GET':
+        watch = MeanrevWatch.objects.filter(user=user).first()
+        if not watch:
+            return Response({"code": 0, "data": {"subscribed": False}})
+        data = watch.to_dict()
+        data['subscribed'] = True
+        return Response({"code": 0, "data": data})
+
+    if request.method == 'DELETE':
+        MeanrevWatch.objects.filter(user=user).delete()
+        return Response({"code": 0, "message": "已取消订阅"})
+
+    # POST: 创建或更新（仅 VIP 可订阅）
+    try:
+        require_vip(user)
+    except VipRequired as ve:
+        return Response({
+            "code": 4002,
+            "message": str(ve),
+            "vip_info": VIP_INFO,
+        }, status=status.HTTP_403_FORBIDDEN)
+
+    payload = request.data or {}
+    etf_codes = payload.get('etf_codes') or []
+    if isinstance(etf_codes, str):
+        etf_codes = [c.strip() for c in etf_codes.split(',') if c.strip()]
+    if len(etf_codes) < 2:
+        return Response({"code": 400, "message": "至少需要2个ETF标的"},
+                        status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        signal_type = payload.get('signal_type', 'bollinger')
+        period = int(payload.get('period', 20))
+        num_std = float(payload.get('num_std', 2.0))
+        oversold = int(payload.get('oversold', 30))
+        overbought = int(payload.get('overbought', 70))
+        stop_loss = float(payload.get('stop_loss', 0.05))
+        rebalance_days = int(payload.get('rebalance_days', 1))
+        initial_capital = float(payload.get('initial_capital', 1000000))
+    except (TypeError, ValueError):
+        return Response({"code": 400, "message": "参数格式错误"},
+                        status=status.HTTP_400_BAD_REQUEST)
+
+    if signal_type not in ('bollinger', 'rsi'):
+        return Response({"code": 400, "message": "signal_type 需为 'bollinger' 或 'rsi'"},
+                        status=status.HTTP_400_BAD_REQUEST)
+
+    min_period = 2 if signal_type == 'rsi' else 5
+    if period < min_period or period > 120:
+        return Response({"code": 400, "message": f"period 需在 {min_period}-120 之间"},
+                        status=status.HTTP_400_BAD_REQUEST)
+
+    watch, created = MeanrevWatch.objects.update_or_create(
+        user=user,
+        defaults={
+            'etf_codes': etf_codes,
+            'signal_type': signal_type,
+            'period': period,
+            'num_std': num_std,
+            'oversold': oversold,
+            'overbought': overbought,
+            'stop_loss': stop_loss,
+            'rebalance_days': rebalance_days,
+            'initial_capital': initial_capital,
+            'enabled': True,
+        },
+    )
+    data = watch.to_dict()
+    data['subscribed'] = True
+    return Response({
+        "code": 0,
+        "message": "订阅成功" if created else "订阅已更新",
+        "data": data,
+    })
