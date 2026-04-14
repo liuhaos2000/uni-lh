@@ -465,6 +465,10 @@ let deviationChart = null
 let equityChart = null
 let optimizeChart = null
 let optDetailChart = null
+let deviationTouchCleanup = null
+let equityTouchCleanup = null
+let optimizeTouchCleanup = null
+let optDetailTouchCleanup = null
 
 const selectedRowKey = computed(() =>
 	selectedRow.value
@@ -488,6 +492,102 @@ const sortedOptResults = computed(() => {
 })
 
 const ETF_COLORS = ['#5470c6', '#91cc75', '#fac858', '#ee6666', '#73c0de', '#fc8452']
+
+// 手动 touch 捏合缩放 + 单指平移（参考股票详情页面）
+function attachTouchZoom(dom, chart) {
+	if (!dom || !chart) return () => {}
+
+	let startDist = 0
+	let startZoom = { start: 0, end: 100 }
+	let lastSingleX = null
+	let startSingleX = null
+	let isDragging = false
+
+	function getZoomState() {
+		const opt = chart.getOption()
+		const dz = opt.dataZoom && opt.dataZoom[0]
+		if (!dz) return { start: 0, end: 100 }
+		return { start: dz.start ?? 0, end: dz.end ?? 100 }
+	}
+
+	function pinchDist(t) {
+		const dx = t[0].clientX - t[1].clientX
+		const dy = t[0].clientY - t[1].clientY
+		return Math.sqrt(dx * dx + dy * dy)
+	}
+
+	function onTouchStart(e) {
+		if (e.touches.length === 2) {
+			startDist = pinchDist(e.touches)
+			startZoom = getZoomState()
+			e.preventDefault()
+		} else if (e.touches.length === 1) {
+			lastSingleX = e.touches[0].clientX
+			startSingleX = e.touches[0].clientX
+			isDragging = false
+		}
+	}
+
+	function onTouchMove(e) {
+		if (e.touches.length === 2) {
+			e.preventDefault()
+			const newDist = pinchDist(e.touches)
+			if (!startDist) return
+			const ratio = startDist / newDist
+			const range = startZoom.end - startZoom.start
+			const newRange = Math.min(100, Math.max(5, range * ratio))
+			const mid = (startZoom.start + startZoom.end) / 2
+			let ns = mid - newRange / 2
+			let ne = mid + newRange / 2
+			if (ns < 0) { ne -= ns; ns = 0 }
+			if (ne > 100) { ns -= (ne - 100); ne = 100 }
+			chart.dispatchAction({ type: 'dataZoom', dataZoomIndex: 0, start: Math.max(0, ns), end: Math.min(100, ne) })
+		} else if (e.touches.length === 1 && lastSingleX !== null) {
+			const cur = e.touches[0].clientX
+			const totalDx = Math.abs(cur - startSingleX)
+			if (totalDx > 5) isDragging = true
+			if (!isDragging) return
+			e.preventDefault()
+			const dx = cur - lastSingleX
+			lastSingleX = cur
+			const { start, end } = getZoomState()
+			const range = end - start
+			const shift = -(dx / (dom.offsetWidth || 1)) * range
+			let ns = start + shift
+			let ne = end + shift
+			if (ns < 0) { ne -= ns; ns = 0 }
+			if (ne > 100) { ns -= (ne - 100); ne = 100 }
+			chart.dispatchAction({ type: 'dataZoom', dataZoomIndex: 0, start: Math.max(0, ns), end: Math.min(100, ne) })
+		}
+	}
+
+	function onTouchEnd(e) {
+		const wasTap = !isDragging && startSingleX !== null
+		if (wasTap && e.changedTouches.length === 1) {
+			const t = e.changedTouches[0]
+			const rect = dom.getBoundingClientRect()
+			chart.dispatchAction({
+				type: 'showTip',
+				x: t.clientX - rect.left,
+				y: t.clientY - rect.top,
+			})
+		}
+		startDist = 0
+		lastSingleX = null
+		startSingleX = null
+		isDragging = false
+	}
+
+	dom.addEventListener('touchstart', onTouchStart, { passive: false })
+	dom.addEventListener('touchmove', onTouchMove, { passive: false })
+	dom.addEventListener('touchend', onTouchEnd)
+
+	return () => {
+		dom.removeEventListener('touchstart', onTouchStart)
+		dom.removeEventListener('touchmove', onTouchMove)
+		dom.removeEventListener('touchend', onTouchEnd)
+	}
+}
 
 onMounted(async () => {
 	loadParams()
@@ -697,6 +797,7 @@ async function runBacktest() {
 }
 
 function renderDeviationChart(echarts, deviationCurves) {
+	if (deviationTouchCleanup) { deviationTouchCleanup(); deviationTouchCleanup = null }
 	if (deviationChart) { deviationChart.dispose(); deviationChart = null }
 	const dom = document.getElementById('deviation-chart')
 	if (!dom) return
@@ -749,9 +850,11 @@ function renderDeviationChart(echarts, deviationCurves) {
 		],
 		series,
 	})
+	deviationTouchCleanup = attachTouchZoom(dom, deviationChart)
 }
 
 function renderEquityChart(echarts, equityCurve) {
+	if (equityTouchCleanup) { equityTouchCleanup(); equityTouchCleanup = null }
 	if (equityChart) { equityChart.dispose(); equityChart = null }
 	const dom = document.getElementById('equity-chart')
 	if (!dom) return
@@ -790,6 +893,7 @@ function renderEquityChart(echarts, equityCurve) {
 			itemStyle: { color: '#5470c6' },
 		}],
 	})
+	equityTouchCleanup = attachTouchZoom(dom, equityChart)
 }
 
 // ========== 参数优化 ==========
@@ -868,6 +972,7 @@ function metricLabel(metric) {
 }
 
 function renderOptimizeChart(echarts) {
+	if (optimizeTouchCleanup) { optimizeTouchCleanup(); optimizeTouchCleanup = null }
 	if (optimizeChart) { optimizeChart.dispose(); optimizeChart = null }
 	const dom = document.getElementById('optimize-chart')
 	if (!dom) return
@@ -966,6 +1071,7 @@ function renderOptimizeChart(echarts) {
 			},
 		}],
 	})
+	optimizeTouchCleanup = attachTouchZoom(dom, optimizeChart)
 }
 
 async function switchHeatmap(metric) {
@@ -1012,6 +1118,7 @@ function applyRow(row) {
 }
 
 function renderOptDetailChart(echarts) {
+	if (optDetailTouchCleanup) { optDetailTouchCleanup(); optDetailTouchCleanup = null }
 	if (optDetailChart) { optDetailChart.dispose(); optDetailChart = null }
 	const dom = document.getElementById('opt-detail-chart')
 	if (!dom || !selectedRow.value) return
@@ -1068,6 +1175,7 @@ function renderOptDetailChart(echarts) {
 		},
 		series,
 	})
+	optDetailTouchCleanup = attachTouchZoom(dom, optDetailChart)
 }
 
 // ========== 工具函数 ==========
@@ -1126,6 +1234,10 @@ onBeforeUnmount(() => {
 	if (typeof window !== 'undefined') {
 		window.removeEventListener('resize', onResize)
 	}
+	if (deviationTouchCleanup) { deviationTouchCleanup(); deviationTouchCleanup = null }
+	if (equityTouchCleanup) { equityTouchCleanup(); equityTouchCleanup = null }
+	if (optimizeTouchCleanup) { optimizeTouchCleanup(); optimizeTouchCleanup = null }
+	if (optDetailTouchCleanup) { optDetailTouchCleanup(); optDetailTouchCleanup = null }
 	if (deviationChart) { deviationChart.dispose(); deviationChart = null }
 	if (equityChart) { equityChart.dispose(); equityChart = null }
 	if (optimizeChart) { optimizeChart.dispose(); optimizeChart = null }
@@ -1341,6 +1453,7 @@ onBeforeUnmount(() => {
 .chart-container {
 	width: 100%;
 	height: 300px;
+	touch-action: none;
 }
 
 .trade-list {
