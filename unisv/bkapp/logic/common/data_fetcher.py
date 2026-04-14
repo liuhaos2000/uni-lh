@@ -7,7 +7,9 @@ import requests as http_requests
 import json
 import re
 from datetime import date, datetime, time as dtime
+from zoneinfo import ZoneInfo
 from django.core.cache import cache
+from django.conf import settings
 from django.utils import timezone
 
 
@@ -131,6 +133,11 @@ def is_trade_day(d):
 def in_trading_session(now=None):
     """是否在 A 股盘中（09:30–11:30 + 13:00–15:00）。"""
     now = now or timezone.localtime()
+    # A股交易时间以北京时间为准，避免服务端 TIME_ZONE=UTC 导致错判
+    try:
+        now = now.astimezone(ZoneInfo("Asia/Shanghai"))
+    except Exception:
+        pass
     if not is_trade_day(now.date()):
         return False
     t = now.time()
@@ -181,29 +188,37 @@ def fetch_etf_names(codes):
 # ==================== 历史数据 ====================
 
 def _fetch_realtime_bar(code):
-    """通过 sinajs 实时接口获取当日临时 bar。"""
-    symbol = f'{get_market_prefix(code)}{code}'
-    url = f'https://hq.sinajs.cn/list={symbol}'
-    headers = {
-        'User-Agent': 'Mozilla/5.0',
-        'Referer': 'https://finance.sina.com.cn',
-    }
+    """通过 MOMA 实时接口获取当日临时 bar。"""
+    token = getattr(settings, 'MOMA_TOKEN', '') or ''
+    if not token:
+        return None
+    url = f'http://api.momaapi.com/fd/real/time/{code}/{token}'
     try:
-        r = http_requests.get(url, headers=headers, timeout=5)
-        m = re.match(r'var hq_str_\w+="([^"]*)"', r.text.strip())
-        if not m:
+        r = http_requests.get(url, timeout=5)
+        payload = r.json()
+        if isinstance(payload, list):
+            data = payload[0] if payload else None
+        elif isinstance(payload, dict):
+            data = payload
+        else:
+            data = None
+        if not data:
             return None
-        fields = m.group(1).split(',')
-        if len(fields) < 32:
-            return None
-        open_p = float(fields[1] or 0)
-        current = float(fields[3] or 0)
-        high = float(fields[4] or 0)
-        low = float(fields[5] or 0)
-        volume = float(fields[8] or 0)
+        open_p = float(data.get('o') or 0)
+        current = float(data.get('p') or 0)
+        high = float(data.get('h') or 0)
+        low = float(data.get('l') or 0)
+        volume = float(data.get('v') or data.get('tv') or 0)
         if current <= 0 or open_p <= 0:
             return None
-        date_str = (fields[30] or '').replace('-', '/')
+        t = str(data.get('t') or '').strip()
+        if not t:
+            return None
+        # Some responses omit the space between date and time (e.g. "2025-02-2115:29:05")
+        m = re.search(r'(\d{4}-\d{2}-\d{2})', t)
+        if not m:
+            return None
+        date_str = m.group(1).replace('-', '/')
         if not date_str:
             return None
         return [date_str, open_p, high, low, current, volume]
@@ -211,7 +226,7 @@ def _fetch_realtime_bar(code):
         return None
 
 
-def fetch_etf_history(code, include_realtime=False):
+def fetch_etf_history(code, include_realtime=True):
     """获取 ETF 历史日线数据。
 
     Args:
