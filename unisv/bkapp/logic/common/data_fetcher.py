@@ -126,7 +126,7 @@ def is_trade_day(d):
 
 
 def in_trading_session(now=None):
-    """是否在 A 股盘中（09:30–11:30 + 13:00–15:00）。"""
+    """是否在 A 股盘中（09:30–）。"""
     now = now or timezone.localtime()
     # A股交易时间以北京时间为准，避免服务端 TIME_ZONE=UTC 导致错判
     try:
@@ -136,9 +136,8 @@ def in_trading_session(now=None):
     if not is_trade_day(now.date()):
         return False
     t = now.time()
-    morning = dtime(9, 30) <= t <= dtime(11, 30)
-    afternoon = dtime(13, 0) <= t < dtime(15, 0)
-    return morning or afternoon
+    morning = dtime(9, 30) <= t
+    return morning
 
 
 # ==================== ETF 名称 ====================
