@@ -1125,18 +1125,24 @@ function renderMomentumChart(echarts, momentumCurves) {
 		tooltip: { show: false },
 	})
 
-	momentumChart.setOption({
-		tooltip: { trigger: 'axis' },
-		legend: { data: legendNames, top: 0 },
-		grid: { left: '10%', right: '4%', top: 40, bottom: 60 },
-		xAxis: { type: 'category', data: dates, boundaryGap: false },
-		yAxis: { type: 'value', scale: true },
-		dataZoom: [
-			{ type: 'inside', start: 0, end: 100 },
-			{ type: 'slider', bottom: 5, start: 0, end: 100 },
-		],
-		series,
-	})
+	       momentumChart.setOption({
+		       tooltip: {
+			       trigger: 'axis',
+			       position: function (point, params, dom, rect, size) {
+				       // 左侧，顶部对齐
+				       return [0, 0];
+			       }
+		       },
+		       legend: { data: legendNames, top: 0 },
+		       grid: { left: '10%', right: '4%', top: 40, bottom: 60 },
+		       xAxis: { type: 'category', data: dates, boundaryGap: false },
+		       yAxis: { type: 'value', scale: true },
+		       dataZoom: [
+			       { type: 'inside', start: 0, end: 100 },
+			       { type: 'slider', bottom: 5, start: 0, end: 100 },
+		       ],
+		       series,
+	       })
 	momentumTouchCleanup = attachTouchZoom(dom, momentumChart)
 }
 

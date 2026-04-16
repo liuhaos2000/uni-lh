@@ -48,14 +48,14 @@
 						<view class="etf-tag" v-for="(item, index) in s1Etfs" :key="item.code">
 							<text class="etf-tag-text">{{ item.name || item.code }}</text>
 							<text class="etf-tag-code">{{ item.code }}</text>
-							<text class="etf-tag-remove" @click="removeEtf(s1Etfs, index)">x</text>
+							<text class="etf-tag-remove" @click="removeEtf('s1', index)">x</text>
 						</view>
 					</view>
 					<view class="etf-add-row">
 						<input class="param-input etf-add-input" v-model="s1NewCode"
-							placeholder="输入ETF代码" @confirm="addEtf(s1Etfs, s1NewCode)" />
+							placeholder="输入ETF代码" @confirm="addEtf('s1')" />
 						<button class="etf-add-btn" type="primary" size="mini"
-							@click="addEtf(s1Etfs, s1NewCode)">添加</button>
+							@click="addEtf('s1')">添加</button>
 					</view>
 				</view>
 				<!-- 动量参数 -->
@@ -133,14 +133,14 @@
 						<view class="etf-tag" v-for="(item, index) in s2Etfs" :key="item.code">
 							<text class="etf-tag-text">{{ item.name || item.code }}</text>
 							<text class="etf-tag-code">{{ item.code }}</text>
-							<text class="etf-tag-remove" @click="removeEtf(s2Etfs, index)">x</text>
+							<text class="etf-tag-remove" @click="removeEtf('s2', index)">x</text>
 						</view>
 					</view>
 					<view class="etf-add-row">
 						<input class="param-input etf-add-input" v-model="s2NewCode"
-							placeholder="输入ETF代码" @confirm="addEtf(s2Etfs, s2NewCode)" />
+							placeholder="输入ETF代码" @confirm="addEtf('s2')" />
 						<button class="etf-add-btn" type="primary" size="mini"
-							@click="addEtf(s2Etfs, s2NewCode)">添加</button>
+							@click="addEtf('s2')">添加</button>
 					</view>
 				</view>
 				<!-- 动量参数 -->
@@ -392,7 +392,14 @@ const requireLogin = () => {
 	return false
 }
 
-const removeEtf = (list, index) => {
+function getEtfState(which) {
+	return which === 's1'
+		? { list: s1Etfs, codeRef: s1NewCode }
+		: { list: s2Etfs, codeRef: s2NewCode }
+}
+
+const removeEtf = (which, index) => {
+	const { list } = getEtfState(which)
 	if (list.value.length <= 2) {
 		uni.showToast({ title: '至少保留2个标的', icon: 'none' })
 		return
@@ -400,7 +407,8 @@ const removeEtf = (list, index) => {
 	list.value.splice(index, 1)
 }
 
-const addEtf = async (list, codeRef) => {
+const addEtf = async (which) => {
+	const { list, codeRef } = getEtfState(which)
 	const code = codeRef.value.trim()
 	if (!code) return
 	if (!/^\d{6}$/.test(code)) {
