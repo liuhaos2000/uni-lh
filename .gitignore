@@ -93,6 +93,9 @@ celerybeat-schedule-*
 *.swo
 *~
 
+# Copilot worktree
+.claude/worktrees/agitated-tesla/
+
 # uni-app / Vue build output
 unpackage/
 dist/
