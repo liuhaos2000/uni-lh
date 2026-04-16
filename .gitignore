@@ -81,6 +81,7 @@ media/
 staticfiles/
 celerybeat-schedule
 celerybeat-schedule-*
+celerybeat-schedule*
 
 # Editors / IDE
 .vscode/
