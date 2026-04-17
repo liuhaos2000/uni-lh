@@ -25,7 +25,6 @@
 						class="etf-popup-search"
 						v-model="keyword"
 						placeholder="搜索代码或名称"
-						:focus="open"
 						:adjust-position="false"
 						confirm-type="search"
 					/>
@@ -36,7 +35,9 @@
 						v-for="item in filtered"
 						:key="item.code"
 						class="etf-popup-item"
-						@touchend.stop.prevent="pick(item)"
+						@touchstart="onItemTouchStart"
+						@touchmove="onItemTouchMove"
+						@touchend="onItemTouchEnd($event, item)"
 					>
 						<text class="etf-popup-item-code">{{ item.code }}</text>
 						<text class="etf-popup-item-name">{{ item.name || '' }}</text>
@@ -65,6 +66,8 @@ const emit = defineEmits(['update:modelValue', 'add'])
 const open = ref(false)
 const keyword = ref('')
 const kbHeight = ref(0)
+const touchStartPos = { x: 0, y: 0, moved: false }
+const TAP_SLOP = 10
 
 const filtered = computed(() => {
 	const kw = keyword.value.trim().toLowerCase()
@@ -109,6 +112,26 @@ function onInput(e) {
 function pick(item) {
 	emit('update:modelValue', item.code)
 	closePanel()
+}
+
+function onItemTouchStart(e) {
+	const t = (e.touches && e.touches[0]) || (e.changedTouches && e.changedTouches[0])
+	touchStartPos.x = t ? t.pageX : 0
+	touchStartPos.y = t ? t.pageY : 0
+	touchStartPos.moved = false
+}
+
+function onItemTouchMove(e) {
+	const t = (e.touches && e.touches[0]) || (e.changedTouches && e.changedTouches[0])
+	if (!t) return
+	if (Math.abs(t.pageX - touchStartPos.x) > TAP_SLOP || Math.abs(t.pageY - touchStartPos.y) > TAP_SLOP) {
+		touchStartPos.moved = true
+	}
+}
+
+function onItemTouchEnd(e, item) {
+	if (touchStartPos.moved) return
+	pick(item)
 }
 
 function onAdd() {
