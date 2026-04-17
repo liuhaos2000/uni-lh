@@ -9,7 +9,7 @@ from ..models.watchlist_stocks import WatchlistStock
 from ..models.momentum_watch import MomentumWatch
 from ..models.meanrev_watch import MeanrevWatch
 import requests
-from ..global_data import get_allskname_fromapi_global
+from ..logic.common.global_data import get_allskname_fromapi_global
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])

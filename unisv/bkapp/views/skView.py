@@ -5,7 +5,7 @@ from rest_framework import status
 
 from ..models.watchlists import Watchlist
 from ..models.watchlist_stocks import WatchlistStock
-from ..global_data import get_allskname_fromapi_global
+from ..logic.common.global_data import get_allskname_fromapi_global
 from ..utils.usage import check_and_inc_backtest, QuotaExceeded, VIP_INFO
 import pandas as pd
 import requests

@@ -51,12 +51,11 @@
 							<text class="etf-tag-remove" @click="removeEtf('s1', index)">x</text>
 						</view>
 					</view>
-					<view class="etf-add-row">
-						<input class="param-input etf-add-input" v-model="s1NewCode"
-							placeholder="输入ETF代码" @confirm="addEtf('s1')" />
-						<button class="etf-add-btn" type="primary" size="mini"
-							@click="addEtf('s1')">添加</button>
-					</view>
+					<etf-selector
+						v-model="s1NewCode"
+						:candidates="myWatchlist"
+						@add="addEtf('s1')"
+					/>
 				</view>
 				<!-- 动量参数 -->
 				<template v-if="s1Type === 'momentum'">
@@ -136,12 +135,11 @@
 							<text class="etf-tag-remove" @click="removeEtf('s2', index)">x</text>
 						</view>
 					</view>
-					<view class="etf-add-row">
-						<input class="param-input etf-add-input" v-model="s2NewCode"
-							placeholder="输入ETF代码" @confirm="addEtf('s2')" />
-						<button class="etf-add-btn" type="primary" size="mini"
-							@click="addEtf('s2')">添加</button>
-					</view>
+					<etf-selector
+						v-model="s2NewCode"
+						:candidates="myWatchlist"
+						@add="addEtf('s2')"
+					/>
 				</view>
 				<!-- 动量参数 -->
 				<template v-if="s2Type === 'momentum'">
@@ -289,6 +287,7 @@
 import { ref, computed, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import postComboBacktest from '@/services/strategy/comboBacktest.js'
 import etfNameLookup from '@/services/strategy/etfNameLookup.js'
+import { getMy } from '@/services/sk/getMy.js'
 import userStore from '@/stores/user.js'
 import { handleVipBlocked } from '@/utils/vipTip.js'
 
@@ -338,6 +337,7 @@ const s2MrOversold = ref(30)
 const s2MrStopLoss = ref(0.05)
 const s2MrRebalance = ref(1)
 
+const myWatchlist = ref([])  // 关注列表 [{code, name}]
 const loading = ref(false)
 const hasResult = ref(false)
 const resultOpen = ref(true)
@@ -376,6 +376,18 @@ onMounted(async () => {
 				if (!item.name && names[item.code]) item.name = names[item.code]
 			})
 		})
+	}
+	// 加载关注列表作为下拉候选
+	try {
+		const res = await getMy()
+		if (res && res.code === 0 && res.data && Array.isArray(res.data.userSkList)) {
+			myWatchlist.value = res.data.userSkList.map(it => ({
+				code: it.skId,
+				name: it.skName,
+			}))
+		}
+	} catch (e) {
+		// 未登录或失败时静默
 	}
 })
 

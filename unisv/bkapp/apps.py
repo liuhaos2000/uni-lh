@@ -11,7 +11,7 @@ class BkappConfig(AppConfig):
             return
 
         # 预加载（不是必须）
-        from .global_data import get_allskname_fromapi_global
+        from .logic.common.global_data import get_allskname_fromapi_global
         try:
             get_allskname_fromapi_global()
         except Exception as e:

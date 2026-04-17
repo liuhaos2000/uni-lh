@@ -12,12 +12,12 @@
 						<text class="etf-tag-remove" @click="removeEtf(index)">x</text>
 					</view>
 				</view>
-				<view class="etf-add-row">
-					<input class="param-input etf-add-input" v-model="newEtfCode"
-						placeholder="输入ETF代码" @confirm="addEtf" />
-					<button class="etf-add-btn" type="primary" size="mini" @click="addEtf"
-						:loading="nameLoading">添加</button>
-				</view>
+				<etf-selector
+					v-model="newEtfCode"
+					:candidates="myWatchlist"
+					:loading="nameLoading"
+					@add="addEtf"
+				/>
 			</view>
 			<view class="param-row">
 				<text class="param-label">回测期间</text>
@@ -337,6 +337,7 @@ import { ref, computed, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import getMeanrevBacktest from '@/services/strategy/meanrevBacktest.js'
 import getMeanrevOptimize from '@/services/strategy/meanrevOptimize.js'
 import etfNameLookup from '@/services/strategy/etfNameLookup.js'
+import { getMy } from '@/services/sk/getMy.js'
 import {
 	getSubscription,
 	saveSubscription,
@@ -357,6 +358,7 @@ const etfList = ref([
 ])
 const newEtfCode = ref('')
 const nameLoading = ref(false)
+const myWatchlist = ref([])  // 关注列表 [{code, name}]
 const startDate = ref('2024-01-01')
 const endDate = ref(new Date().toISOString().slice(0, 10))
 const signalType = ref('bollinger')
@@ -597,6 +599,18 @@ onMounted(async () => {
 		etfList.value.forEach(item => {
 			if (!item.name && names[item.code]) item.name = names[item.code]
 		})
+	}
+	// 加载关注列表作为下拉候选
+	try {
+		const res = await getMy()
+		if (res && res.code === 0 && res.data && Array.isArray(res.data.userSkList)) {
+			myWatchlist.value = res.data.userSkList.map(it => ({
+				code: it.skId,
+				name: it.skName,
+			}))
+		}
+	} catch (e) {
+		// 未登录或失败时静默
 	}
 	// 查询订阅状态
 	if (userStore.isLoggedIn.value) {
