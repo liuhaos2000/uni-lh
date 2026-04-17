@@ -1148,6 +1148,22 @@ async function runBacktest() {
 	}
 }
 
+// 返回 dataZoom.start 百分比，默认让图表聚焦到最近 6 个月
+function recentHalfYearStartPercent(dates) {
+	if (!dates || dates.length < 2) return 0
+	const last = new Date(String(dates[dates.length - 1]).replace(/\//g, '-'))
+	if (isNaN(last.getTime())) return 0
+	const cutoff = new Date(last)
+	cutoff.setMonth(cutoff.getMonth() - 6)
+	for (let i = 0; i < dates.length; i++) {
+		const d = new Date(String(dates[i]).replace(/\//g, '-'))
+		if (!isNaN(d.getTime()) && d >= cutoff) {
+			return Math.min(99, Math.round((i / (dates.length - 1)) * 100))
+		}
+	}
+	return 0
+}
+
 function renderMomentumChart(echarts, momentumCurves) {
 	if (momentumTouchCleanup) { momentumTouchCleanup(); momentumTouchCleanup = null }
 	if (momentumChart) { momentumChart.dispose(); momentumChart = null }
@@ -1180,21 +1196,24 @@ function renderMomentumChart(echarts, momentumCurves) {
 		tooltip: { show: false },
 	})
 
+	       const zoomStart = recentHalfYearStartPercent(dates)
 	       momentumChart.setOption({
 		       tooltip: {
 			       trigger: 'axis',
-			       position: function (point, params, dom, rect, size) {
-				       // 左侧，顶部对齐
-				       return [0, 0];
-			       }
+			       confine: true,
+			       position: [10, 40],
+			       order: 'valueDesc',
+			       backgroundColor: 'rgba(255, 255, 255, 0.92)',
+			       borderColor: '#ddd',
+			       textStyle: { fontSize: 11 },
 		       },
 		       legend: { data: legendNames, top: 0 },
 		       grid: { left: '10%', right: '4%', top: 40, bottom: 60 },
 		       xAxis: { type: 'category', data: dates, boundaryGap: false },
 		       yAxis: { type: 'value', scale: true },
 		       dataZoom: [
-			       { type: 'inside', start: 0, end: 100 },
-			       { type: 'slider', bottom: 5, start: 0, end: 100 },
+			       { type: 'inside', start: zoomStart, end: 100 },
+			       { type: 'slider', bottom: 5, start: zoomStart, end: 100 },
 		       ],
 		       series,
 	       })
