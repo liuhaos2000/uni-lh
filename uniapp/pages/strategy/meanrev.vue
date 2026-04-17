@@ -2,9 +2,36 @@
 	<view class="uni-container">
 		<!-- 参数设置区 -->
 		<view class="param-section">
-			<text class="section-title">
-				参数设置<p v-if="isEditMode" class="edit-banner">（{{ editingSubName }}）</p>
-			</text>
+			<view class="section-title-bar">
+				<view class="section-title-left">
+					<text class="section-title">参数设置</text>
+					<text v-if="isEditMode" class="edit-name">（{{ editingSubName }}）</text>
+				</view>
+				<view class="section-title-actions">
+					<template v-if="isEditMode">
+						<button
+							class="title-btn title-btn-secondary"
+							size="mini"
+							:loading="subscribing"
+							@click="doCreate"
+						>另存为</button>
+						<button
+							class="title-btn title-btn-primary"
+							size="mini"
+							:loading="subscribing"
+							@click="doUpdate"
+						>保存修改</button>
+					</template>
+					<template v-else>
+						<button
+							class="title-btn title-btn-primary"
+							size="mini"
+							:loading="subscribing"
+							@click="doCreate"
+						>订阅</button>
+					</template>
+				</view>
+			</view>
 			<view class="param-row-vertical">
 				<text class="param-label">ETF标的</text>
 				<view class="etf-tags">
@@ -327,11 +354,6 @@
 			</view><!-- v-show btSectionOpen 结束 -->
 			</view><!-- bt-section-box 结束 -->
 		</view>
-		<!-- 底部订阅操作栏 -->
-		<view class="goods-carts goods-carts2">
-			<uni-goods-nav :options="navOptions" :buttonGroup="subBtnGroup" @buttonClick="onSubBtnClick" />
-		</view>
-
 		<sub-name-dialog
 			v-model="namePopupOpen"
 			:loading="subscribing"
@@ -354,7 +376,6 @@ import {
 } from '@/services/strategy/meanrevSubscription.js'
 import userStore from '@/stores/user.js'
 import { handleVipBlocked } from '@/utils/vipTip.js'
-import uniGoodsNav from '@dcloudio/uni-ui/lib/uni-goods-nav/uni-goods-nav.vue'
 
 const STORAGE_KEY = 'meanrev_params'
 
@@ -459,18 +480,6 @@ const editingSubId = ref(null)
 const editingSubName = ref('')
 const isEditMode = computed(() => editingSubId.value != null)
 const namePopupOpen = ref(false)
-
-// 底部操作栏
-const navOptions = ref([])
-const subBtnGroup = computed(() => {
-	if (isEditMode.value) {
-		return [
-			{ text: '另存为', backgroundColor: '#5470c6', color: '#fff' },
-			{ text: '保存修改', backgroundColor: '#ffa200', color: '#fff' },
-		]
-	}
-	return [{ text: '订阅每日推送', backgroundColor: '#ffa200', color: '#fff' }]
-})
 
 // 图表实例
 let deviationChart = null
@@ -734,16 +743,6 @@ const doUpdate = async () => {
 		uni.showToast({ title: '保存失败', icon: 'none' })
 	} finally {
 		subscribing.value = false
-	}
-}
-
-const onSubBtnClick = (e) => {
-	if (subscribing.value) return
-	if (isEditMode.value) {
-		if (e && e.index === 0) doCreate()
-		else doUpdate()
-	} else {
-		doCreate()
 	}
 }
 
@@ -1342,29 +1341,6 @@ onBeforeUnmount(() => {
 	padding-bottom: 20px;
 }
 
-.edit-banner {
-	background: #fff;
-	border-radius: 8px;
-	padding: 16px;
-	margin-bottom: 12px;
-	box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
-	display: flex;
-	align-items: center;
-}
-
-.edit-banner-label {
-	font-size: 14px;
-	color: #666;
-	width: 80px;
-	flex-shrink: 0;
-}
-
-.edit-banner-name {
-	font-size: 16px;
-	font-weight: 600;
-	color: #333;
-}
-
 .param-section {
 	background: #fff;
 	border-radius: 8px;
@@ -1379,6 +1355,63 @@ onBeforeUnmount(() => {
 	color: #333;
 	margin-bottom: 12px;
 	display: block;
+}
+
+.section-title-bar {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	margin-bottom: 12px;
+}
+
+.section-title-left {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+}
+
+.section-title-bar .section-title {
+	margin-bottom: 0;
+}
+
+.edit-name {
+	font-size: 12px;
+	color: #ffa200;
+	font-weight: 500;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.section-title-actions {
+	display: flex;
+	gap: 6px;
+	flex-shrink: 0;
+}
+
+.title-btn {
+	font-size: 12px !important;
+	min-height: 26px !important;
+	line-height: 24px !important;
+	padding: 0 12px !important;
+	margin: 0 !important;
+	border-radius: 13px !important;
+}
+
+.title-btn-secondary {
+	background: #5470c6 !important;
+	color: #fff !important;
+	border: none !important;
+}
+
+.title-btn-primary {
+	background: #ffa200 !important;
+	color: #fff !important;
+	border: none !important;
 }
 
 .param-row {
@@ -1933,25 +1966,4 @@ onBeforeUnmount(() => {
 	font-weight: 600;
 }
 
-.goods-carts {
-	display: flex;
-	flex-direction: column;
-	position: fixed;
-	left: 0;
-	right: 0;
-	/* #ifdef H5 */
-	left: var(--window-left);
-	right: var(--window-right);
-	/* #endif */
-	bottom: 0;
-	z-index: 99;
-}
-
-.goods-carts2 ::v-deep .uni-tab__cart-sub-left {
-	display: none;
-}
-
-.goods-carts2 ::v-deep .uni-tab__cart-sub-right {
-	flex: 1;
-}
 </style>
