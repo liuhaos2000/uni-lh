@@ -306,6 +306,12 @@
 		<view class="goods-carts goods-carts2">
 			<uni-goods-nav :options="navOptions" :buttonGroup="subBtnGroup" @buttonClick="onSubBtnClick" />
 		</view>
+
+		<sub-name-dialog
+			v-model="namePopupOpen"
+			:loading="subscribing"
+			@confirm="onNameConfirmed"
+		/>
 	</view>
 </template>
 
@@ -419,12 +425,16 @@ const subscribing = ref(false)
 const editingSubId = ref(null)        // 修改模式下的订阅 id
 const editingSubName = ref('')        // 修改模式下的订阅名称
 const isEditMode = computed(() => editingSubId.value != null)
+const namePopupOpen = ref(false)
 
 // 底部操作栏
 const navOptions = ref([])
 const subBtnGroup = computed(() => {
 	if (isEditMode.value) {
-		return [{ text: '保存修改', backgroundColor: '#ffa200', color: '#fff' }]
+		return [
+			{ text: '另存为', backgroundColor: '#5470c6', color: '#fff' },
+			{ text: '保存修改', backgroundColor: '#ffa200', color: '#fff' },
+		]
 	}
 	return [{ text: '订阅每日推送', backgroundColor: '#ffa200', color: '#fff' }]
 })
@@ -640,32 +650,37 @@ function buildPayload() {
 	}
 }
 
-// 创建：弹框输入名称 → POST
+// 创建：弹出自定义命名对话框 → POST
 const doCreate = () => {
 	if (!requireLogin()) return
-	uni.showModal({
-		title: '订阅命名',
-		editable: true,
-		placeholderText: '给这个订阅起个名字',
-		success: async (r) => {
-			if (!r.confirm) return
-			const name = (r.content || '').trim() || '未命名订阅'
-			subscribing.value = true
-			try {
-				const res = await createSubscription({ ...buildPayload(), name })
-				if (handleVipBlocked(res)) return
-				if (res && res.code === 0) {
-					uni.showToast({ title: res.message || '订阅成功', icon: 'success' })
-				} else {
-					uni.showToast({ title: (res && res.message) || '订阅失败', icon: 'none' })
-				}
-			} catch (e) {
-				uni.showToast({ title: '订阅请求失败', icon: 'none' })
-			} finally {
-				subscribing.value = false
+	namePopupOpen.value = true
+}
+
+const onNameConfirmed = async (name) => {
+	if (subscribing.value) return
+	const finalName = (name || '').trim() || '未命名订阅'
+	subscribing.value = true
+	try {
+		const res = await createSubscription({ ...buildPayload(), name: finalName })
+		if (handleVipBlocked(res)) {
+			namePopupOpen.value = false
+			return
+		}
+		if (res && res.code === 0) {
+			namePopupOpen.value = false
+			if (res.data && res.data.id != null) {
+				editingSubId.value = res.data.id
+				editingSubName.value = res.data.name || finalName
 			}
-		},
-	})
+			uni.showToast({ title: res.message || '订阅成功', icon: 'success' })
+		} else {
+			uni.showToast({ title: (res && res.message) || '订阅失败', icon: 'none' })
+		}
+	} catch (e) {
+		uni.showToast({ title: '订阅请求失败', icon: 'none' })
+	} finally {
+		subscribing.value = false
+	}
 }
 
 // 更新：直接 PUT
@@ -687,10 +702,14 @@ const doUpdate = async () => {
 	}
 }
 
-const onSubBtnClick = () => {
+const onSubBtnClick = (e) => {
 	if (subscribing.value) return
-	if (isEditMode.value) doUpdate()
-	else doCreate()
+	if (isEditMode.value) {
+		if (e && e.index === 0) doCreate()
+		else doUpdate()
+	} else {
+		doCreate()
+	}
 }
 
 const removeEtf = (index) => {
