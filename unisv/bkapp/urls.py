@@ -11,9 +11,13 @@ from .views.skView import get_huice
 from .views.skView import addToWatchlist
 from .views.skView import removeFromWatchlist
 from .views.momentumView import (
-    momentum_backtest, momentum_optimize, etf_name_lookup, momentum_subscription,
+    momentum_backtest, momentum_optimize, etf_name_lookup,
+    momentum_subscriptions, momentum_subscription_detail, momentum_subscription_notify,
 )
-from .views.meanrevView import meanrev_backtest, meanrev_optimize, meanrev_subscription
+from .views.meanrevView import (
+    meanrev_backtest, meanrev_optimize,
+    meanrev_subscriptions, meanrev_subscription_detail, meanrev_subscription_notify,
+)
 from .views.comboView import combo_backtest
 from .views.authView import (
     register, login, me, captcha, send_email_code, reset_password,
@@ -36,12 +40,16 @@ urlpatterns = [
     path('momentum/backtest/', momentum_backtest),
     path('momentum/optimize/', momentum_optimize),
     path('momentum/etf-names/', etf_name_lookup),
-    path('momentum/subscription/', momentum_subscription),
+    path('momentum/subscriptions/', momentum_subscriptions),
+    path('momentum/subscriptions/<int:pk>/', momentum_subscription_detail),
+    path('momentum/subscriptions/<int:pk>/notify/', momentum_subscription_notify),
 
     #meanrev
     path('meanrev/backtest/', meanrev_backtest),
     path('meanrev/optimize/', meanrev_optimize),
-    path('meanrev/subscription/', meanrev_subscription),
+    path('meanrev/subscriptions/', meanrev_subscriptions),
+    path('meanrev/subscriptions/<int:pk>/', meanrev_subscription_detail),
+    path('meanrev/subscriptions/<int:pk>/notify/', meanrev_subscription_notify),
 
     #combo
     path('combo/backtest/', combo_backtest),

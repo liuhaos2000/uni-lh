@@ -2,7 +2,9 @@
 	<view class="uni-container">
 		<!-- 参数设置区 -->
 		<view class="param-section">
-			<text class="section-title">参数设置</text>
+			<text class="section-title">
+				参数设置<p v-if="isEditMode" class="edit-banner">（{{ editingSubName }}）</p>
+			</text>
 			<view class="param-row-vertical">
 				<text class="param-label">ETF标的</text>
 				<view class="etf-tags">
@@ -334,14 +336,15 @@
 
 <script setup>
 import { ref, computed, nextTick, onMounted, onBeforeUnmount } from 'vue'
+import { onLoad } from '@dcloudio/uni-app'
 import getMeanrevBacktest from '@/services/strategy/meanrevBacktest.js'
 import getMeanrevOptimize from '@/services/strategy/meanrevOptimize.js'
 import etfNameLookup from '@/services/strategy/etfNameLookup.js'
 import { getMy } from '@/services/sk/getMy.js'
 import {
 	getSubscription,
-	saveSubscription,
-	deleteSubscription,
+	createSubscription,
+	updateSubscription,
 } from '@/services/strategy/meanrevSubscription.js'
 import userStore from '@/stores/user.js'
 import { handleVipBlocked } from '@/utils/vipTip.js'
@@ -445,21 +448,18 @@ const optSectionOpen = ref(true)
 const optTableOpen = ref(false)
 
 // 订阅状态
-const subscribed = ref(false)
 const subscribing = ref(false)
+const editingSubId = ref(null)
+const editingSubName = ref('')
+const isEditMode = computed(() => editingSubId.value != null)
 
 // 底部操作栏
 const navOptions = ref([])
 const subBtnGroup = computed(() => {
-	if (subscribed.value) {
-		return [
-			{ text: '取消订阅', backgroundColor: '#bbb', color: '#fff' },
-			{ text: '更新参数', backgroundColor: '#ffa200', color: '#fff' },
-		]
+	if (isEditMode.value) {
+		return [{ text: '保存修改', backgroundColor: '#ffa200', color: '#fff' }]
 	}
-	return [
-		{ text: '订阅每日飞书推送', backgroundColor: '#ffa200', color: '#fff' },
-	]
+	return [{ text: '订阅每日推送', backgroundColor: '#ffa200', color: '#fff' }]
 })
 
 // 图表实例
@@ -591,8 +591,42 @@ function attachTouchZoom(dom, chart) {
 	}
 }
 
+// 接收 ?id= 参数
+const pageQuery = ref({})
+onLoad((options) => {
+	pageQuery.value = options || {}
+})
+
+function applySubscriptionToForm(sub) {
+	if (!sub) return
+	if (Array.isArray(sub.etf_codes) && sub.etf_codes.length) {
+		etfList.value = sub.etf_codes.map(code => ({ code, name: '' }))
+	}
+	if (sub.signal_type) signalType.value = sub.signal_type
+	if (sub.period != null) period.value = sub.period
+	if (sub.num_std != null) numStd.value = sub.num_std
+	if (sub.oversold != null) oversold.value = sub.oversold
+	if (sub.stop_loss != null) stopLoss.value = sub.stop_loss
+	if (sub.rebalance_days != null) rebalanceDays.value = sub.rebalance_days
+	if (sub.initial_capital != null) initialCapital.value = sub.initial_capital
+}
+
 onMounted(async () => {
-	loadParams()
+	const subId = pageQuery.value.id
+	if (subId && userStore.isLoggedIn.value) {
+		try {
+			const res = await getSubscription(subId)
+			if (res && res.code === 0 && res.data) {
+				editingSubId.value = res.data.id
+				editingSubName.value = res.data.name || '未命名订阅'
+				applySubscriptionToForm(res.data)
+			}
+		} catch (e) {
+			uni.showToast({ title: '加载订阅失败', icon: 'none' })
+		}
+	} else {
+		loadParams()
+	}
 	const missingCodes = etfList.value.filter(e => !e.name).map(e => e.code)
 	if (missingCodes.length > 0) {
 		const names = await etfNameLookup(missingCodes.join(','))
@@ -612,17 +646,6 @@ onMounted(async () => {
 	} catch (e) {
 		// 未登录或失败时静默
 	}
-	// 查询订阅状态
-	if (userStore.isLoggedIn.value) {
-		try {
-			const res = await getSubscription()
-			if (res && res.code === 0 && res.data && res.data.subscribed) {
-				subscribed.value = true
-			}
-		} catch (e) {
-			// 忽略
-		}
-	}
 })
 
 const requireLogin = () => {
@@ -640,53 +663,40 @@ const requireLogin = () => {
 	return false
 }
 
-const doSubscribe = async () => {
-	if (subscribing.value) return
-	if (!requireLogin()) return
-	subscribing.value = true
-	try {
-		const res = await saveSubscription({
-			etf_codes: etfList.value.map(e => e.code),
-			signal_type: signalType.value,
-			period: Number(period.value),
-			num_std: Number(numStd.value),
-			oversold: Number(oversold.value),
-			overbought: 70,
-			stop_loss: Number(stopLoss.value),
-			rebalance_days: Number(rebalanceDays.value),
-			initial_capital: Number(initialCapital.value),
-		})
-		if (handleVipBlocked(res)) return
-		if (res && res.code === 0) {
-			subscribed.value = true
-			uni.showToast({ title: res.message || '订阅成功', icon: 'success' })
-		} else {
-			uni.showToast({ title: (res && res.message) || '订阅失败', icon: 'none' })
-		}
-	} catch (e) {
-		uni.showToast({ title: '订阅请求失败', icon: 'none' })
-	} finally {
-		subscribing.value = false
+function buildPayload() {
+	return {
+		etf_codes: etfList.value.map(e => e.code),
+		signal_type: signalType.value,
+		period: Number(period.value),
+		num_std: Number(numStd.value),
+		oversold: Number(oversold.value),
+		overbought: 70,
+		stop_loss: Number(stopLoss.value),
+		rebalance_days: Number(rebalanceDays.value),
+		initial_capital: Number(initialCapital.value),
 	}
 }
 
-const doUnsubscribe = () => {
-	if (subscribing.value) return
+const doCreate = () => {
 	if (!requireLogin()) return
 	uni.showModal({
-		title: '取消订阅',
-		content: '确定不再接收每日均值回归信号推送？',
+		title: '订阅命名',
+		editable: true,
+		placeholderText: '给这个订阅起个名字',
 		success: async (r) => {
 			if (!r.confirm) return
+			const name = (r.content || '').trim() || '未命名订阅'
 			subscribing.value = true
 			try {
-				const res = await deleteSubscription()
+				const res = await createSubscription({ ...buildPayload(), name })
+				if (handleVipBlocked(res)) return
 				if (res && res.code === 0) {
-					subscribed.value = false
-					uni.showToast({ title: '已取消订阅', icon: 'success' })
+					uni.showToast({ title: res.message || '订阅成功', icon: 'success' })
+				} else {
+					uni.showToast({ title: (res && res.message) || '订阅失败', icon: 'none' })
 				}
 			} catch (e) {
-				uni.showToast({ title: '取消失败', icon: 'none' })
+				uni.showToast({ title: '订阅请求失败', icon: 'none' })
 			} finally {
 				subscribing.value = false
 			}
@@ -694,14 +704,28 @@ const doUnsubscribe = () => {
 	})
 }
 
-const onSubBtnClick = (e) => {
-	const text = e && e.content && e.content.text
-	if (!text) return
-	if (text === '取消订阅') {
-		doUnsubscribe()
-	} else {
-		doSubscribe()
+const doUpdate = async () => {
+	if (!requireLogin()) return
+	subscribing.value = true
+	try {
+		const res = await updateSubscription(editingSubId.value, buildPayload())
+		if (handleVipBlocked(res)) return
+		if (res && res.code === 0) {
+			uni.showToast({ title: res.message || '已保存', icon: 'success' })
+		} else {
+			uni.showToast({ title: (res && res.message) || '保存失败', icon: 'none' })
+		}
+	} catch (e) {
+		uni.showToast({ title: '保存失败', icon: 'none' })
+	} finally {
+		subscribing.value = false
 	}
+}
+
+const onSubBtnClick = () => {
+	if (subscribing.value) return
+	if (isEditMode.value) doUpdate()
+	else doCreate()
 }
 
 const removeEtf = (index) => {
@@ -1263,6 +1287,29 @@ onBeforeUnmount(() => {
 .uni-container {
 	padding: 12px;
 	padding-bottom: 20px;
+}
+
+.edit-banner {
+	background: #fff;
+	border-radius: 8px;
+	padding: 16px;
+	margin-bottom: 12px;
+	box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+	display: flex;
+	align-items: center;
+}
+
+.edit-banner-label {
+	font-size: 14px;
+	color: #666;
+	width: 80px;
+	flex-shrink: 0;
+}
+
+.edit-banner-name {
+	font-size: 16px;
+	font-weight: 600;
+	color: #333;
 }
 
 .param-section {

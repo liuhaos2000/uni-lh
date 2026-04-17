@@ -5,28 +5,30 @@ from django.conf import settings
 class MomentumWatch(models.Model):
     """动量轮动策略订阅。
 
-    每个用户最多一条订阅记录（user OneToOne）。
+    每个用户最多 5 条订阅。enabled 字段同时作为"通知"开关。
     模拟交易状态不在此存储——任务每天重跑回测取最后一天结果。
     """
     class Meta:
         db_table = 'momentum_watch'
 
-    user = models.OneToOneField(
+    user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
-        related_name='momentum_watch',
+        related_name='momentum_watches',
     )
+    name = models.CharField(max_length=50, default='')
     etf_codes = models.JSONField(default=list)  # ["518880", "513100", ...]
     lookback_n = models.IntegerField(default=25)
     rebalance_days = models.IntegerField(default=5)
     initial_capital = models.FloatField(default=1000000)
-    enabled = models.BooleanField(default=True)
+    enabled = models.BooleanField(default=True)  # 通知开关
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     def to_dict(self):
         return {
             'id': self.id,
+            'name': self.name,
             'etf_codes': self.etf_codes,
             'lookback_n': self.lookback_n,
             'rebalance_days': self.rebalance_days,

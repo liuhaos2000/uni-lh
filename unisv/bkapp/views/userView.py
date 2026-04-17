@@ -46,7 +46,7 @@ def get_user_first_stock(request):
 
         # 拿当前用户的 watchlist
         watchlist = Watchlist.objects.filter(openid=openid).first()
-
+        print(watchlist)
         if not watchlist:
             return Response({
                 "code": 0,
@@ -123,6 +123,12 @@ def get_stocks_from_codes(stock_codes):
                 print(f"Stock code {code} not found in all_stock_info")
         except Exception as e:
             print(f"Error processing data for {code}: {e}")
+            stock_data.append({
+                    "skId": code,
+                    "skName": name,
+                    "price": None,
+                    "movement": None
+                })
 
     return stock_data
 
@@ -154,51 +160,53 @@ def get_user_subscriptions(request):
 
     # 动量轮动订阅
     try:
-        momentum = MomentumWatch.objects.filter(user=user).first()
-        if momentum:
+        for w in MomentumWatch.objects.filter(user=user).order_by('id'):
             subscriptions.append({
+                'id': w.id,
+                'name': w.name or '未命名订阅',
                 'strategy': 'momentum',
                 'strategy_name': '动量轮动',
                 'params': {
-                    'etf_codes': momentum.etf_codes,
-                    'lookback_n': momentum.lookback_n,
-                    'rebalance_days': momentum.rebalance_days,
-                    'initial_capital': momentum.initial_capital,
+                    'etf_codes': w.etf_codes,
+                    'lookback_n': w.lookback_n,
+                    'rebalance_days': w.rebalance_days,
+                    'initial_capital': w.initial_capital,
                 },
-                'enabled': momentum.enabled,
-                'created_at': momentum.created_at.isoformat() if momentum.created_at else None,
-                'updated_at': momentum.updated_at.isoformat() if momentum.updated_at else None,
+                'enabled': w.enabled,
+                'created_at': w.created_at.isoformat() if w.created_at else None,
+                'updated_at': w.updated_at.isoformat() if w.updated_at else None,
             })
     except Exception:
         pass
 
     # 均值回归订阅
     try:
-        meanrev = MeanrevWatch.objects.filter(user=user).first()
-        if meanrev:
-            signal_label = '布林带' if meanrev.signal_type == 'bollinger' else 'RSI'
+        for w in MeanrevWatch.objects.filter(user=user).order_by('id'):
+            signal_label = '布林带' if w.signal_type == 'bollinger' else 'RSI'
             params = {
-                'etf_codes': meanrev.etf_codes,
-                'signal_type': meanrev.signal_type,
+                'etf_codes': w.etf_codes,
+                'signal_type': w.signal_type,
                 'signal_type_label': signal_label,
-                'period': meanrev.period,
-                'rebalance_days': meanrev.rebalance_days,
-                'stop_loss': meanrev.stop_loss,
-                'initial_capital': meanrev.initial_capital,
+                'period': w.period,
+                'rebalance_days': w.rebalance_days,
+                'stop_loss': w.stop_loss,
+                'initial_capital': w.initial_capital,
             }
-            if meanrev.signal_type == 'bollinger':
-                params['num_std'] = meanrev.num_std
+            if w.signal_type == 'bollinger':
+                params['num_std'] = w.num_std
             else:
-                params['oversold'] = meanrev.oversold
-                params['overbought'] = meanrev.overbought
+                params['oversold'] = w.oversold
+                params['overbought'] = w.overbought
 
             subscriptions.append({
+                'id': w.id,
+                'name': w.name or '未命名订阅',
                 'strategy': 'meanrev',
                 'strategy_name': f'均值回归({signal_label})',
                 'params': params,
-                'enabled': meanrev.enabled,
-                'created_at': meanrev.created_at.isoformat() if meanrev.created_at else None,
-                'updated_at': meanrev.updated_at.isoformat() if meanrev.updated_at else None,
+                'enabled': w.enabled,
+                'created_at': w.created_at.isoformat() if w.created_at else None,
+                'updated_at': w.updated_at.isoformat() if w.updated_at else None,
             })
     except Exception:
         pass

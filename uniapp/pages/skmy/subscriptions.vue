@@ -8,12 +8,21 @@
 		</view>
 
 		<view v-else class="sub-list">
-			<view v-for="(item, index) in subscriptions" :key="item.strategy" class="sub-card">
+			<view v-for="item in subscriptions" :key="item.strategy + '_' + item.id" class="sub-card">
 				<view class="sub-header">
-					<text class="sub-name">{{ item.strategy_name }}</text>
-					<text :class="['sub-status', item.enabled ? 'status-on' : 'status-off']">
-						{{ item.enabled ? '推送中' : '已暂停' }}
-					</text>
+					<view class="sub-header-main">
+						<text class="sub-name">{{ item.name }}</text>
+						<text class="sub-strategy">{{ item.strategy_name }}</text>
+					</view>
+					<view class="sub-notify">
+						<text class="notify-label">通知</text>
+						<switch
+							:checked="item.enabled"
+							color="#ffa200"
+							style="transform:scale(0.7);"
+							@change="onNotifyChange(item, $event)"
+						/>
+					</view>
 				</view>
 
 				<!-- 参数详情 -->
@@ -76,7 +85,7 @@
 
 				<view class="sub-actions">
 					<button class="action-btn action-edit" type="default" size="mini"
-						@click="goEditStrategy(item)">修改参数</button>
+						@click="goEditStrategy(item)">查看订阅</button>
 					<button class="action-btn action-cancel" type="default" size="mini"
 						@click="cancelSubscription(item)">取消订阅</button>
 				</view>
@@ -89,8 +98,14 @@
 import { ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import getSubscriptions from '@/services/user/getSubscriptions.js'
-import { deleteSubscription as deleteMomentum } from '@/services/strategy/momentumSubscription.js'
-import { deleteSubscription as deleteMeanrev } from '@/services/strategy/meanrevSubscription.js'
+import {
+	deleteSubscription as deleteMomentum,
+	setSubscriptionNotify as setMomentumNotify,
+} from '@/services/strategy/momentumSubscription.js'
+import {
+	deleteSubscription as deleteMeanrev,
+	setSubscriptionNotify as setMeanrevNotify,
+} from '@/services/strategy/meanrevSubscription.js'
 
 const loading = ref(false)
 const subscriptions = ref([])
@@ -124,27 +139,38 @@ const formatDate = (isoStr) => {
 }
 
 const goEditStrategy = (item) => {
-	if (item.strategy === 'momentum') {
-		uni.navigateTo({ url: '/pages/strategy/momentum' })
-	} else if (item.strategy === 'meanrev') {
-		uni.navigateTo({ url: '/pages/strategy/meanrev' })
+	const url = item.strategy === 'momentum'
+		? `/pages/strategy/momentum?id=${item.id}`
+		: `/pages/strategy/meanrev?id=${item.id}`
+	uni.navigateTo({ url })
+}
+
+const onNotifyChange = async (item, e) => {
+	const enabled = !!(e && e.detail && e.detail.value)
+	const prev = item.enabled
+	item.enabled = enabled  // 乐观更新
+	try {
+		const fn = item.strategy === 'momentum' ? setMomentumNotify : setMeanrevNotify
+		const res = await fn(item.id, enabled)
+		if (!(res && res.code === 0)) {
+			item.enabled = prev
+			uni.showToast({ title: (res && res.message) || '操作失败', icon: 'none' })
+		}
+	} catch (err) {
+		item.enabled = prev
+		uni.showToast({ title: '操作失败', icon: 'none' })
 	}
 }
 
 const cancelSubscription = (item) => {
-	const name = item.strategy_name
 	uni.showModal({
 		title: '取消订阅',
-		content: `确定取消「${name}」的每日信号推送？`,
+		content: `确定取消「${item.name}」？`,
 		success: async (r) => {
 			if (!r.confirm) return
 			try {
-				let res
-				if (item.strategy === 'momentum') {
-					res = await deleteMomentum()
-				} else if (item.strategy === 'meanrev') {
-					res = await deleteMeanrev()
-				}
+				const fn = item.strategy === 'momentum' ? deleteMomentum : deleteMeanrev
+				const res = await fn(item.id)
 				if (res && res.code === 0) {
 					uni.showToast({ title: '已取消订阅', icon: 'success' })
 					await loadSubscriptions()
@@ -210,26 +236,34 @@ const cancelSubscription = (item) => {
 	margin-bottom: 12px;
 }
 
+.sub-header-main {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	flex: 1;
+}
+
 .sub-name {
 	font-size: 16px;
 	font-weight: 600;
 	color: #333;
 }
 
-.sub-status {
+.sub-strategy {
 	font-size: 12px;
-	padding: 2px 10px;
-	border-radius: 10px;
-}
-
-.status-on {
-	background: #e8f5e9;
-	color: #2e7d32;
-}
-
-.status-off {
-	background: #f5f5f5;
 	color: #999;
+}
+
+.sub-notify {
+	display: flex;
+	align-items: center;
+	gap: 2px;
+	flex-shrink: 0;
+}
+
+.notify-label {
+	font-size: 12px;
+	color: #666;
 }
 
 .sub-params {

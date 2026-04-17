@@ -401,30 +401,57 @@ def _attach_composite_score(results):
         row['composite_score'] = round(composite, 4)
 
 
-@api_view(['GET', 'POST', 'DELETE'])
-@permission_classes([IsAuthenticated])
-def momentum_subscription(request):
-    """动量轮动信号订阅管理（需要登录）。
+MAX_MOMENTUM_SUBSCRIPTIONS = 5
 
-    GET    返回当前用户的订阅
-    POST   body: {etf_codes, lookback_n, rebalance_days, initial_capital}
-    DELETE 取消订阅
+
+def _validate_momentum_payload(payload):
+    """校验动量订阅参数，返回 (data_dict, error_response)"""
+    etf_codes = payload.get('etf_codes') or []
+    if isinstance(etf_codes, str):
+        etf_codes = [c.strip() for c in etf_codes.split(',') if c.strip()]
+    if len(etf_codes) < 2:
+        return None, Response({"code": 400, "message": "至少需要2个ETF标的"},
+                              status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        lookback_n = int(payload.get('lookback_n', 25))
+        rebalance_days = int(payload.get('rebalance_days', 5))
+        initial_capital = float(payload.get('initial_capital', 1000000))
+    except (TypeError, ValueError):
+        return None, Response({"code": 400, "message": "参数格式错误"},
+                              status=status.HTTP_400_BAD_REQUEST)
+
+    if lookback_n < 1 or lookback_n > 60:
+        return None, Response({"code": 400, "message": "lookback_n 需在 1-60 之间"},
+                              status=status.HTTP_400_BAD_REQUEST)
+
+    return {
+        'etf_codes': etf_codes,
+        'lookback_n': lookback_n,
+        'rebalance_days': rebalance_days,
+        'initial_capital': initial_capital,
+    }, None
+
+
+@api_view(['GET', 'POST'])
+@permission_classes([IsAuthenticated])
+def momentum_subscriptions(request):
+    """动量轮动订阅集合接口。
+
+    GET  返回当前用户全部订阅 [{...}]
+    POST body: {name, etf_codes, lookback_n, rebalance_days, initial_capital}
+         创建一条新订阅（每个用户最多 5 条，VIP only）
     """
     user = request.user
 
     if request.method == 'GET':
-        watch = MomentumWatch.objects.filter(user=user).first()
-        if not watch:
-            return Response({"code": 0, "data": {"subscribed": False}})
-        data = watch.to_dict()
-        data['subscribed'] = True
-        return Response({"code": 0, "data": data})
+        watches = MomentumWatch.objects.filter(user=user).order_by('id')
+        return Response({
+            "code": 0,
+            "data": [w.to_dict() for w in watches],
+        })
 
-    if request.method == 'DELETE':
-        MomentumWatch.objects.filter(user=user).delete()
-        return Response({"code": 0, "message": "已取消订阅"})
-
-    # POST: 创建或更新（仅 VIP 可订阅）
+    # POST: 创建
     try:
         require_vip(user)
     except VipRequired as ve:
@@ -434,43 +461,77 @@ def momentum_subscription(request):
             "vip_info": VIP_INFO,
         }, status=status.HTTP_403_FORBIDDEN)
 
+    if MomentumWatch.objects.filter(user=user).count() >= MAX_MOMENTUM_SUBSCRIPTIONS:
+        return Response({
+            "code": 400,
+            "message": f"动量轮动订阅最多 {MAX_MOMENTUM_SUBSCRIPTIONS} 条",
+        }, status=status.HTTP_400_BAD_REQUEST)
+
     payload = request.data or {}
-    etf_codes = payload.get('etf_codes') or []
-    if isinstance(etf_codes, str):
-        etf_codes = [c.strip() for c in etf_codes.split(',') if c.strip()]
-    if len(etf_codes) < 2:
-        return Response({"code": 400, "message": "至少需要2个ETF标的"},
-                        status=status.HTTP_400_BAD_REQUEST)
+    data, err = _validate_momentum_payload(payload)
+    if err:
+        return err
 
-    try:
-        lookback_n = int(payload.get('lookback_n', 25))
-        rebalance_days = int(payload.get('rebalance_days', 5))
-        initial_capital = float(payload.get('initial_capital', 1000000))
-    except (TypeError, ValueError):
-        return Response({"code": 400, "message": "参数格式错误"},
-                        status=status.HTTP_400_BAD_REQUEST)
-
-    if lookback_n < 1 or lookback_n > 60:
-        return Response({"code": 400, "message": "lookback_n 需在 1-60 之间"},
-                        status=status.HTTP_400_BAD_REQUEST)
-
-    watch, created = MomentumWatch.objects.update_or_create(
+    name = (payload.get('name') or '').strip() or '未命名订阅'
+    watch = MomentumWatch.objects.create(
         user=user,
-        defaults={
-            'etf_codes': etf_codes,
-            'lookback_n': lookback_n,
-            'rebalance_days': rebalance_days,
-            'initial_capital': initial_capital,
-            'enabled': True,
-        },
+        name=name,
+        enabled=True,
+        **data,
     )
-    data = watch.to_dict()
-    data['subscribed'] = True
     return Response({
         "code": 0,
-        "message": "订阅成功" if created else "订阅已更新",
-        "data": data,
+        "message": "订阅成功",
+        "data": watch.to_dict(),
     })
+
+
+@api_view(['GET', 'PUT', 'DELETE'])
+@permission_classes([IsAuthenticated])
+def momentum_subscription_detail(request, pk):
+    """单条动量订阅。
+
+    GET    返回该订阅
+    PUT    更新参数（不修改 name）
+    DELETE 删除
+    """
+    user = request.user
+    watch = MomentumWatch.objects.filter(user=user, pk=pk).first()
+    if not watch:
+        return Response({"code": 404, "message": "订阅不存在"},
+                        status=status.HTTP_404_NOT_FOUND)
+
+    if request.method == 'GET':
+        return Response({"code": 0, "data": watch.to_dict()})
+
+    if request.method == 'DELETE':
+        watch.delete()
+        return Response({"code": 0, "message": "已删除"})
+
+    # PUT
+    payload = request.data or {}
+    data, err = _validate_momentum_payload(payload)
+    if err:
+        return err
+    for k, v in data.items():
+        setattr(watch, k, v)
+    watch.save()
+    return Response({"code": 0, "message": "已保存", "data": watch.to_dict()})
+
+
+@api_view(['PATCH'])
+@permission_classes([IsAuthenticated])
+def momentum_subscription_notify(request, pk):
+    """切换通知开关。body: {enabled: bool}"""
+    user = request.user
+    watch = MomentumWatch.objects.filter(user=user, pk=pk).first()
+    if not watch:
+        return Response({"code": 404, "message": "订阅不存在"},
+                        status=status.HTTP_404_NOT_FOUND)
+    enabled = bool((request.data or {}).get('enabled', True))
+    watch.enabled = enabled
+    watch.save(update_fields=['enabled', 'updated_at'])
+    return Response({"code": 0, "data": watch.to_dict()})
 
 
 @api_view(['GET'])

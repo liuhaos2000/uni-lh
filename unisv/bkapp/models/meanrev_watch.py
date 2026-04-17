@@ -5,16 +5,17 @@ from django.conf import settings
 class MeanrevWatch(models.Model):
     """均值回归策略订阅。
 
-    每个用户最多一条订阅记录（user OneToOne）。
+    每个用户最多 5 条订阅。enabled 字段同时作为"通知"开关。
     """
     class Meta:
         db_table = 'meanrev_watch'
 
-    user = models.OneToOneField(
+    user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
-        related_name='meanrev_watch',
+        related_name='meanrev_watches',
     )
+    name = models.CharField(max_length=50, default='')
     etf_codes = models.JSONField(default=list)  # ["518880", "513100", ...]
     signal_type = models.CharField(max_length=20, default='bollinger')  # bollinger / rsi
     period = models.IntegerField(default=20)
@@ -31,6 +32,7 @@ class MeanrevWatch(models.Model):
     def to_dict(self):
         return {
             'id': self.id,
+            'name': self.name,
             'etf_codes': self.etf_codes,
             'signal_type': self.signal_type,
             'period': self.period,

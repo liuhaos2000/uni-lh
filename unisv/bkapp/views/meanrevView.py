@@ -401,46 +401,17 @@ def _attach_composite_score(results):
         row['composite_score'] = round(composite, 4)
 
 
-@api_view(['GET', 'POST', 'DELETE'])
-@permission_classes([IsAuthenticated])
-def meanrev_subscription(request):
-    """均值回归信号订阅管理（需要登录）。
+MAX_MEANREV_SUBSCRIPTIONS = 5
 
-    GET    返回当前用户的订阅
-    POST   body: {etf_codes, signal_type, period, num_std, oversold, overbought, stop_loss, rebalance_days, initial_capital}
-    DELETE 取消订阅
-    """
-    user = request.user
 
-    if request.method == 'GET':
-        watch = MeanrevWatch.objects.filter(user=user).first()
-        if not watch:
-            return Response({"code": 0, "data": {"subscribed": False}})
-        data = watch.to_dict()
-        data['subscribed'] = True
-        return Response({"code": 0, "data": data})
-
-    if request.method == 'DELETE':
-        MeanrevWatch.objects.filter(user=user).delete()
-        return Response({"code": 0, "message": "已取消订阅"})
-
-    # POST: 创建或更新（仅 VIP 可订阅）
-    try:
-        require_vip(user)
-    except VipRequired as ve:
-        return Response({
-            "code": 4002,
-            "message": str(ve),
-            "vip_info": VIP_INFO,
-        }, status=status.HTTP_403_FORBIDDEN)
-
-    payload = request.data or {}
+def _validate_meanrev_payload(payload):
+    """校验均值回归订阅参数，返回 (data_dict, error_response)"""
     etf_codes = payload.get('etf_codes') or []
     if isinstance(etf_codes, str):
         etf_codes = [c.strip() for c in etf_codes.split(',') if c.strip()]
     if len(etf_codes) < 2:
-        return Response({"code": 400, "message": "至少需要2个ETF标的"},
-                        status=status.HTTP_400_BAD_REQUEST)
+        return None, Response({"code": 400, "message": "至少需要2个ETF标的"},
+                              status=status.HTTP_400_BAD_REQUEST)
 
     try:
         signal_type = payload.get('signal_type', 'bollinger')
@@ -452,37 +423,119 @@ def meanrev_subscription(request):
         rebalance_days = int(payload.get('rebalance_days', 1))
         initial_capital = float(payload.get('initial_capital', 1000000))
     except (TypeError, ValueError):
-        return Response({"code": 400, "message": "参数格式错误"},
-                        status=status.HTTP_400_BAD_REQUEST)
+        return None, Response({"code": 400, "message": "参数格式错误"},
+                              status=status.HTTP_400_BAD_REQUEST)
 
     if signal_type not in ('bollinger', 'rsi'):
-        return Response({"code": 400, "message": "signal_type 需为 'bollinger' 或 'rsi'"},
-                        status=status.HTTP_400_BAD_REQUEST)
+        return None, Response({"code": 400, "message": "signal_type 需为 'bollinger' 或 'rsi'"},
+                              status=status.HTTP_400_BAD_REQUEST)
 
     min_period = 2 if signal_type == 'rsi' else 5
     if period < min_period or period > 120:
-        return Response({"code": 400, "message": f"period 需在 {min_period}-120 之间"},
-                        status=status.HTTP_400_BAD_REQUEST)
+        return None, Response({"code": 400, "message": f"period 需在 {min_period}-120 之间"},
+                              status=status.HTTP_400_BAD_REQUEST)
 
-    watch, created = MeanrevWatch.objects.update_or_create(
+    return {
+        'etf_codes': etf_codes,
+        'signal_type': signal_type,
+        'period': period,
+        'num_std': num_std,
+        'oversold': oversold,
+        'overbought': overbought,
+        'stop_loss': stop_loss,
+        'rebalance_days': rebalance_days,
+        'initial_capital': initial_capital,
+    }, None
+
+
+@api_view(['GET', 'POST'])
+@permission_classes([IsAuthenticated])
+def meanrev_subscriptions(request):
+    """均值回归订阅集合接口。
+
+    GET  返回当前用户全部订阅
+    POST body: {name, etf_codes, signal_type, period, ...} 创建（最多 5 条，VIP only）
+    """
+    user = request.user
+
+    if request.method == 'GET':
+        watches = MeanrevWatch.objects.filter(user=user).order_by('id')
+        return Response({
+            "code": 0,
+            "data": [w.to_dict() for w in watches],
+        })
+
+    try:
+        require_vip(user)
+    except VipRequired as ve:
+        return Response({
+            "code": 4002,
+            "message": str(ve),
+            "vip_info": VIP_INFO,
+        }, status=status.HTTP_403_FORBIDDEN)
+
+    if MeanrevWatch.objects.filter(user=user).count() >= MAX_MEANREV_SUBSCRIPTIONS:
+        return Response({
+            "code": 400,
+            "message": f"均值回归订阅最多 {MAX_MEANREV_SUBSCRIPTIONS} 条",
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+    payload = request.data or {}
+    data, err = _validate_meanrev_payload(payload)
+    if err:
+        return err
+
+    name = (payload.get('name') or '').strip() or '未命名订阅'
+    watch = MeanrevWatch.objects.create(
         user=user,
-        defaults={
-            'etf_codes': etf_codes,
-            'signal_type': signal_type,
-            'period': period,
-            'num_std': num_std,
-            'oversold': oversold,
-            'overbought': overbought,
-            'stop_loss': stop_loss,
-            'rebalance_days': rebalance_days,
-            'initial_capital': initial_capital,
-            'enabled': True,
-        },
+        name=name,
+        enabled=True,
+        **data,
     )
-    data = watch.to_dict()
-    data['subscribed'] = True
     return Response({
         "code": 0,
-        "message": "订阅成功" if created else "订阅已更新",
-        "data": data,
+        "message": "订阅成功",
+        "data": watch.to_dict(),
     })
+
+
+@api_view(['GET', 'PUT', 'DELETE'])
+@permission_classes([IsAuthenticated])
+def meanrev_subscription_detail(request, pk):
+    """单条均值回归订阅。"""
+    user = request.user
+    watch = MeanrevWatch.objects.filter(user=user, pk=pk).first()
+    if not watch:
+        return Response({"code": 404, "message": "订阅不存在"},
+                        status=status.HTTP_404_NOT_FOUND)
+
+    if request.method == 'GET':
+        return Response({"code": 0, "data": watch.to_dict()})
+
+    if request.method == 'DELETE':
+        watch.delete()
+        return Response({"code": 0, "message": "已删除"})
+
+    payload = request.data or {}
+    data, err = _validate_meanrev_payload(payload)
+    if err:
+        return err
+    for k, v in data.items():
+        setattr(watch, k, v)
+    watch.save()
+    return Response({"code": 0, "message": "已保存", "data": watch.to_dict()})
+
+
+@api_view(['PATCH'])
+@permission_classes([IsAuthenticated])
+def meanrev_subscription_notify(request, pk):
+    """切换通知开关。body: {enabled: bool}"""
+    user = request.user
+    watch = MeanrevWatch.objects.filter(user=user, pk=pk).first()
+    if not watch:
+        return Response({"code": 404, "message": "订阅不存在"},
+                        status=status.HTTP_404_NOT_FOUND)
+    enabled = bool((request.data or {}).get('enabled', True))
+    watch.enabled = enabled
+    watch.save(update_fields=['enabled', 'updated_at'])
+    return Response({"code": 0, "data": watch.to_dict()})
