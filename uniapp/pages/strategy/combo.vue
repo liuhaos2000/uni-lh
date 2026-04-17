@@ -342,6 +342,37 @@ const loading = ref(false)
 const hasResult = ref(false)
 const resultOpen = ref(true)
 
+const RESULT_KEY = 'combo_result'
+
+// 保存/恢复回测结果（手机浏览器切后台再回来时 H5 页面会整页重载，结果不丢）
+const saveResult = (data) => {
+	try {
+		uni.setStorageSync(RESULT_KEY, data)
+	} catch (e) {
+		console.error('保存回测结果失败', e)
+	}
+}
+const loadResult = () => {
+	try {
+		const saved = uni.getStorageSync(RESULT_KEY)
+		if (!saved) return null
+		comboSummary.value = saved.combo_summary || {}
+		s1Summary.value = saved.s1_summary || {}
+		s2Summary.value = saved.s2_summary || {}
+		s1Label.value = saved.s1_label || '策略一'
+		s2Label.value = saved.s2_label || '策略二'
+		s1Weight.value = saved.s1_weight
+		s2Weight.value = saved.s2_weight
+		tradeRecords.value = saved.trade_records || []
+		etfNames.value = { ...etfNames.value, ...(saved.etf_names || {}) }
+		hasResult.value = true
+		return saved
+	} catch (e) {
+		console.error('读取回测结果失败', e)
+		return null
+	}
+}
+
 const comboSummary = ref({})
 const s1Summary = ref({})
 const s2Summary = ref({})
@@ -388,6 +419,19 @@ onMounted(async () => {
 		}
 	} catch (e) {
 		// 未登录或失败时静默
+	}
+
+	// 恢复上次组合回测结果（手机切后台导致 H5 页面重载时避免用户重新点击）
+	const savedResult = loadResult()
+	if (savedResult) {
+		await nextTick()
+		const echarts = await loadEcharts()
+		renderEquityChart(
+			echarts,
+			savedResult.combo_equity_curve,
+			savedResult.s1_equity_curve,
+			savedResult.s2_equity_curve,
+		)
 	}
 })
 
@@ -502,6 +546,7 @@ async function runCombo() {
 		tradeRecords.value = data.trade_records || []
 		etfNames.value = data.etf_names || {}
 		hasResult.value = true
+		saveResult(data)
 
 		await nextTick()
 		const echarts = await loadEcharts()

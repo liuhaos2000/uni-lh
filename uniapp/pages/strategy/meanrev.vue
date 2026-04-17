@@ -378,6 +378,8 @@ import userStore from '@/stores/user.js'
 import { handleVipBlocked } from '@/utils/vipTip.js'
 
 const STORAGE_KEY = 'meanrev_params'
+const RESULT_KEY = 'meanrev_result'
+const OPT_RESULT_KEY = 'meanrev_opt_result'
 
 // 参数
 const etfList = ref([
@@ -450,6 +452,30 @@ const tradeRecords = ref([])
 const currentHolding = ref(null)
 const etfNames = ref({})
 
+// 保存/恢复回测结果（手机浏览器切后台再回来时 H5 页面会整页重载，结果不丢）
+const saveResult = (data) => {
+	try {
+		uni.setStorageSync(RESULT_KEY, data)
+	} catch (e) {
+		console.error('保存回测结果失败', e)
+	}
+}
+const loadResult = () => {
+	try {
+		const saved = uni.getStorageSync(RESULT_KEY)
+		if (!saved) return null
+		summary.value = saved.summary || {}
+		tradeRecords.value = saved.trade_records || []
+		currentHolding.value = saved.current_holding || null
+		etfNames.value = { ...etfNames.value, ...(saved.etf_names || {}) }
+		hasResult.value = true
+		return saved
+	} catch (e) {
+		console.error('读取回测结果失败', e)
+		return null
+	}
+}
+
 const etfLabel = (code) => {
 	const name = etfNames.value[code]
 	return name && name !== code ? `${name}` : code
@@ -473,6 +499,33 @@ const selectedRow = ref(null)
 const btSectionOpen = ref(true)
 const optSectionOpen = ref(true)
 const optTableOpen = ref(false)
+
+const saveOptResult = (data) => {
+	try {
+		uni.setStorageSync(OPT_RESULT_KEY, data)
+	} catch (e) {
+		console.error('保存优化结果失败', e)
+	}
+}
+const loadOptResult = () => {
+	try {
+		const saved = uni.getStorageSync(OPT_RESULT_KEY)
+		if (!saved) return null
+		optResults.value = saved.results || []
+		optPeriodList.value = saved.period_list || []
+		optRList.value = saved.r_list || []
+		optBestSharpe.value = saved.best_sharpe || null
+		optBestRobust.value = saved.best_robust || null
+		optBestOos.value = saved.best_oos || null
+		optHasOos.value = !!saved.oos_enabled
+		hasOptResult.value = true
+		selectedRow.value = optBestSharpe.value
+		return saved
+	} catch (e) {
+		console.error('读取优化结果失败', e)
+		return null
+	}
+}
 
 // 订阅状态
 const subscribing = ref(false)
@@ -665,6 +718,22 @@ onMounted(async () => {
 	} catch (e) {
 		// 未登录或失败时静默
 	}
+
+	// 恢复上次回测/优化结果（手机切后台导致 H5 页面重载时避免用户重新点击）
+	const savedResult = loadResult()
+	const savedOpt = loadOptResult()
+	if (savedResult || savedOpt) {
+		await nextTick()
+		const echarts = await loadEcharts()
+		if (savedResult) {
+			renderDeviationChart(echarts, savedResult.deviation_curves)
+			renderEquityChart(echarts, savedResult.equity_curve)
+		}
+		if (savedOpt) {
+			renderOptimizeChart(echarts)
+			if (selectedRow.value) renderOptDetailChart(echarts)
+		}
+	}
 })
 
 const requireLogin = () => {
@@ -839,6 +908,7 @@ async function runBacktest() {
 		currentHolding.value = data.current_holding || null
 		etfNames.value = data.etf_names || {}
 		hasResult.value = true
+		saveResult(data)
 
 		await nextTick()
 		const echarts = await loadEcharts()
@@ -1029,6 +1099,7 @@ async function runOptimize() {
 		optHasOos.value = !!data.oos_enabled
 		hasOptResult.value = true
 		selectedRow.value = optBestSharpe.value
+		saveOptResult(data)
 
 		await nextTick()
 		const echarts = await loadEcharts()
