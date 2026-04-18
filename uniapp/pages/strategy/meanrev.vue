@@ -452,10 +452,17 @@ const tradeRecords = ref([])
 const currentHolding = ref(null)
 const etfNames = ref({})
 
+// 持久化上下文：区分自由模式 / 某个订阅的编辑模式
+// 从订阅页带 ?id=xxx 进来时，不能把其他上下文的结果误当作当前订阅的结果
+const getPersistCtx = () => {
+	const id = pageQuery.value && pageQuery.value.id
+	return id != null && id !== '' ? `sub:${id}` : 'free'
+}
+
 // 保存/恢复回测结果（手机浏览器切后台再回来时 H5 页面会整页重载，结果不丢）
 const saveResult = (data) => {
 	try {
-		uni.setStorageSync(RESULT_KEY, data)
+		uni.setStorageSync(RESULT_KEY, { ...data, _ctx: getPersistCtx() })
 	} catch (e) {
 		console.error('保存回测结果失败', e)
 	}
@@ -464,6 +471,8 @@ const loadResult = () => {
 	try {
 		const saved = uni.getStorageSync(RESULT_KEY)
 		if (!saved) return null
+		// 上下文不匹配（例如从订阅页进入但缓存是其他订阅/自由模式）：忽略
+		if (saved._ctx !== getPersistCtx()) return null
 		summary.value = saved.summary || {}
 		tradeRecords.value = saved.trade_records || []
 		currentHolding.value = saved.current_holding || null
@@ -502,7 +511,7 @@ const optTableOpen = ref(false)
 
 const saveOptResult = (data) => {
 	try {
-		uni.setStorageSync(OPT_RESULT_KEY, data)
+		uni.setStorageSync(OPT_RESULT_KEY, { ...data, _ctx: getPersistCtx() })
 	} catch (e) {
 		console.error('保存优化结果失败', e)
 	}
@@ -511,6 +520,7 @@ const loadOptResult = () => {
 	try {
 		const saved = uni.getStorageSync(OPT_RESULT_KEY)
 		if (!saved) return null
+		if (saved._ctx !== getPersistCtx()) return null
 		optResults.value = saved.results || []
 		optPeriodList.value = saved.period_list || []
 		optRList.value = saved.r_list || []
