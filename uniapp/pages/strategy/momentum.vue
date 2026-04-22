@@ -72,6 +72,13 @@
 				<text class="param-label">初始资金</text>
 				<input class="param-input" type="number" v-model="initialCapital" />
 			</view>
+			<view class="param-row">
+				<text class="param-label">仓位配置</text>
+				<input class="param-input" type="text" v-model="positionWeightsStr" placeholder="如 0.5,0.3,0.2" />
+			</view>
+			<view class="param-row opt-extra-row">
+				<text class="opt-extra-hint">逗号分隔每个名次的仓位比例，默认 1（仅买第一名）。和≤1，余下为现金。</text>
+			</view>
 			<view class="param-row opt-extra-row">
 				<text class="param-label">样本外验证</text>
 				<switch :checked="enableOos" @change="onOosChange" color="#ffa200" style="transform:scale(0.8);" />
@@ -300,26 +307,26 @@
 							</view>
 						</view>
 						</view>
-					<!-- 当前持仓 -->
-					<view v-if="currentHolding" class="holding-card">
+					<!-- 当前持仓（支持多仓） -->
+					<view v-for="(h, hi) in currentHoldings" :key="'holding-' + hi" class="holding-card">
 						<view class="trade-row1">
-							<text class="trade-etf">{{ etfLabel(currentHolding.etfCode) }}</text>
-							<text class="holding-badge">持仓中</text>
-							<text class="trade-profit" :class="currentHolding.unrealizedProfit >= 0 ? 'profit-up' : 'profit-down'">
-								{{ (currentHolding.unrealizedProfit >= 0 ? '+' : '') }}{{ (currentHolding.unrealizedProfit * 100).toFixed(2) }}%
+							<text class="trade-etf">{{ etfLabel(h.etfCode) }}</text>
+							<text class="holding-badge">持仓中<template v-if="h.rank != null">·第{{ h.rank + 1 }}名{{ h.weight != null ? ' '+(h.weight*100).toFixed(0)+'%' : '' }}</template></text>
+							<text class="trade-profit" :class="h.unrealizedProfit >= 0 ? 'profit-up' : 'profit-down'">
+								{{ (h.unrealizedProfit >= 0 ? '+' : '') }}{{ (h.unrealizedProfit * 100).toFixed(2) }}%
 							</text>
 						</view>
 						<view class="trade-row2">
 							<view class="trade-side">
 								<text class="trade-label">买入日</text>
-								<text class="trade-date">{{ currentHolding.buyDate }}</text>
-								<text class="trade-price">{{ currentHolding.buyPrice }}</text>
+								<text class="trade-date">{{ h.buyDate }}</text>
+								<text class="trade-price">{{ h.buyPrice }}</text>
 							</view>
 							<view class="trade-arrow">→</view>
 							<view class="trade-side">
 								<text class="trade-label">现价</text>
-								<text class="trade-date">持有 {{ currentHolding.holdingDays }} 天</text>
-								<text class="trade-price">{{ currentHolding.currentPrice }}</text>
+								<text class="trade-date">持有 {{ h.holdingDays }} 天</text>
+								<text class="trade-price">{{ h.currentPrice }}</text>
 							</view>
 						</view>
 					</view>
@@ -372,7 +379,15 @@ const endDate = ref(new Date().toISOString().slice(0, 10))
 const lookbackN = ref(25)
 const rebalanceDays = ref(5)
 const initialCapital = ref(1000000)
+const positionWeightsStr = ref('1')
 const loading = ref(false)
+
+// 解析 '0.5,0.3,0.2' → [0.5, 0.3, 0.2]；非法条目被丢弃
+const parsePositionWeights = (s) => {
+	if (!s) return [1]
+	const parts = String(s).split(',').map(x => Number(x.trim())).filter(v => Number.isFinite(v) && v > 0)
+	return parts.length ? parts : [1]
+}
 
 // 保存参数到本地
 const saveParams = () => {
@@ -384,6 +399,7 @@ const saveParams = () => {
 			lookbackN: lookbackN.value,
 			rebalanceDays: rebalanceDays.value,
 			initialCapital: initialCapital.value,
+			positionWeightsStr: positionWeightsStr.value,
 		})
 	} catch (e) {
 		console.error('保存参数失败', e)
@@ -403,6 +419,7 @@ const loadParams = () => {
 		if (saved.lookbackN) lookbackN.value = saved.lookbackN
 		if (saved.rebalanceDays) rebalanceDays.value = saved.rebalanceDays
 		if (saved.initialCapital) initialCapital.value = saved.initialCapital
+		if (saved.positionWeightsStr) positionWeightsStr.value = saved.positionWeightsStr
 		return true
 	} catch (e) {
 		console.error('读取参数失败', e)
@@ -415,6 +432,7 @@ const hasResult = ref(false)
 const summary = ref({})
 const tradeRecords = ref([])
 const currentHolding = ref(null)
+const currentHoldings = ref([])
 const etfNames = ref({})  // {code: name}
 
 // 持久化上下文：区分自由模式 / 某个订阅的编辑模式
@@ -441,6 +459,7 @@ const loadResult = () => {
 		summary.value = saved.summary || {}
 		tradeRecords.value = saved.trade_records || []
 		currentHolding.value = saved.current_holding || null
+		currentHoldings.value = saved.current_holdings || (saved.current_holding ? [saved.current_holding] : [])
 		etfNames.value = { ...etfNames.value, ...(saved.etf_names || {}) }
 		hasResult.value = true
 		return saved
@@ -1192,6 +1211,12 @@ async function runBacktest() {
 		const formattedStart = startDate.value.replace(/-/g, '/')
 		const formattedEnd = endDate.value.replace(/-/g, '/')
 
+		const weights = parsePositionWeights(positionWeightsStr.value)
+		if (weights.reduce((a, b) => a + b, 0) > 1 + 1e-6) {
+			uni.showToast({ title: '仓位权重之和不能超过 1', icon: 'none' })
+			loading.value = false
+			return
+		}
 		const res = await getMomentumBacktest({
 			codes: etfList.value.map(e => e.code).join(','),
 			start_date: formattedStart,
@@ -1199,6 +1224,7 @@ async function runBacktest() {
 			lookback_n: lookbackN.value,
 			rebalance_days: rebalanceDays.value,
 			initial_capital: initialCapital.value,
+			position_weights: weights.join(','),
 		})
 
 		// VIP 配额拦截
@@ -1213,6 +1239,7 @@ async function runBacktest() {
 		summary.value = data.summary || {}
 		tradeRecords.value = data.trade_records || []
 		currentHolding.value = data.current_holding || null
+		currentHoldings.value = data.current_holdings || (data.current_holding ? [data.current_holding] : [])
 		etfNames.value = data.etf_names || {}
 		hasResult.value = true
 		saveResult(data)

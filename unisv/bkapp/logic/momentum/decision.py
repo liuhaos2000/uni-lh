@@ -107,3 +107,89 @@ def decide_signal(scores, holding_code, days_since_rebalance, rebalance_days,
         'reason': '建仓买入',
         'is_rebalance_day': True,
     }
+
+
+def decide_signal_multi(scores, holding_codes, days_since_rebalance, rebalance_days,
+                        top_n=1, above_ma=None, abs_threshold=ABS_MOMENTUM_THRESHOLD):
+    """Top-N 版决策：返回目标持仓代码列表。
+
+    规则：
+      - 未到调仓日 → 持有不动
+      - 数据不足 → 不动
+      - 最高分 < abs_threshold → 全部空仓（不再看后续名次）
+      - 否则返回按评分降序前 top_n 名（不足则全返回）
+
+    Returns:
+        dict: {
+            'action': 'hold' | 'sell' | 'rebalance',
+            'target_codes': [code1, code2, ...],    # 目标持仓集合（有序，按排名）
+            'reason': str,
+            'is_rebalance_day': bool,
+        }
+        holding_codes: 当前持仓代码集合（iterable），仅用于判断是否需要动作。
+    """
+    holding_set = set(holding_codes or [])
+    is_rebalance_day = days_since_rebalance >= rebalance_days
+
+    if not is_rebalance_day:
+        return {
+            'action': 'hold',
+            'target_codes': list(holding_codes or []),
+            'reason': '未到调仓日',
+            'is_rebalance_day': False,
+        }
+
+    if not scores:
+        return {
+            'action': 'hold',
+            'target_codes': list(holding_codes or []),
+            'reason': '评分数据不足',
+            'is_rebalance_day': False,
+        }
+
+    filtered_scores = dict(scores)
+    if above_ma is not None:
+        for code, s in filtered_scores.items():
+            if s is not None and not above_ma.get(code, True):
+                filtered_scores[code] = -abs(s) if s > 0 else s
+
+    # 按评分降序排序（None 视为 -inf）
+    ranked = sorted(
+        filtered_scores.items(),
+        key=lambda kv: kv[1] if kv[1] is not None else float('-inf'),
+        reverse=True,
+    )
+
+    # 最高分低于阈值 → 全部空仓
+    top_score = ranked[0][1] if ranked else None
+    if top_score is None or top_score < abs_threshold:
+        if holding_set:
+            return {
+                'action': 'sell',
+                'target_codes': [],
+                'reason': f'绝对动量不足(最高{top_score:.2f}<{abs_threshold})空仓',
+                'is_rebalance_day': True,
+            }
+        return {
+            'action': 'hold',
+            'target_codes': [],
+            'reason': '绝对动量不足继续空仓',
+            'is_rebalance_day': True,
+        }
+
+    target_codes = [code for code, _ in ranked[:top_n]]
+
+    if set(target_codes) == holding_set and holding_set:
+        return {
+            'action': 'hold',
+            'target_codes': target_codes,
+            'reason': '持仓集合未变',
+            'is_rebalance_day': True,
+        }
+
+    return {
+        'action': 'rebalance',
+        'target_codes': target_codes,
+        'reason': '调仓' if holding_set else '建仓买入',
+        'is_rebalance_day': True,
+    }

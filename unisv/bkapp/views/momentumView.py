@@ -50,9 +50,29 @@ def momentum_backtest(request):
         rebalance_days = int(request.query_params.get('rebalance_days', 5))
         initial_capital = float(request.query_params.get('initial_capital', 1000000))
 
+        # Top-N 仓位权重，如 '0.5,0.3,0.2'，默认 '1' 表示单仓全仓
+        weights_str = request.query_params.get('position_weights', '1')
+        try:
+            position_weights = [float(x.strip()) for x in weights_str.split(',') if x.strip()]
+        except ValueError:
+            return Response({"code": 400, "message": "position_weights 格式错误"},
+                            status=status.HTTP_400_BAD_REQUEST)
+        if not position_weights:
+            position_weights = [1.0]
+
         # 参数校验
         if lookback_n < 1 or lookback_n > 60:
             return Response({"code": 400, "message": "lookback_n 需在 1-60 之间"},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        if any(w <= 0 for w in position_weights):
+            return Response({"code": 400, "message": "每个仓位权重需大于 0"},
+                            status=status.HTTP_400_BAD_REQUEST)
+        if sum(position_weights) > 1.0 + 1e-6:
+            return Response({"code": 400, "message": "仓位权重之和不能超过 1"},
+                            status=status.HTTP_400_BAD_REQUEST)
+        if len(position_weights) > 10:
+            return Response({"code": 400, "message": "持仓数量不能超过 10"},
                             status=status.HTTP_400_BAD_REQUEST)
 
         etf_codes = [c.strip() for c in codes_str.split(',') if c.strip()]
@@ -95,6 +115,7 @@ def momentum_backtest(request):
             initial_capital=initial_capital,
             lookback_n=lookback_n,
             rebalance_days=rebalance_days,
+            position_weights=position_weights,
         )
 
         result['etf_names'] = etf_names
