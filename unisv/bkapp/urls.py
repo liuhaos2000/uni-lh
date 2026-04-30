@@ -19,6 +19,7 @@ from .views.meanrevView import (
     meanrev_subscriptions, meanrev_subscription_detail, meanrev_subscription_notify,
 )
 from .views.comboView import combo_backtest
+from .views.multidimView import multidim_backtest
 from .views.authView import (
     register, login, me, captcha, send_email_code, reset_password,
 )
@@ -53,6 +54,9 @@ urlpatterns = [
 
     #combo
     path('combo/backtest/', combo_backtest),
+
+    #multidim (多维条件策略)
+    path('multidim/backtest/', multidim_backtest),
 
     #mypage
     path('my/firststock/', get_user_first_stock),

@@ -45,6 +45,14 @@ const strategies = ref([
 		page: '/pages/strategy/combo',
 		icon: '\u2696',
 		iconBg: 'icon-bg-orange',
+	},
+	{
+		id: 'multidim',
+		name: '多维条件策略',
+		description: '趋势·量价·人气·异动四维共振时买入，任一不满足即卖出，单标的全仓',
+		page: '/pages/strategy/multidim',
+		icon: '\u25A6',
+		iconBg: 'icon-bg-green',
 	}
 ])
 
@@ -122,6 +130,13 @@ const goToStrategy = (item) => {
 }
 .icon-bg-orange .card-icon {
 	color: #ef6c00;
+}
+
+.icon-bg-green {
+	background: #e8f5e9;
+}
+.icon-bg-green .card-icon {
+	color: #2e7d32;
 }
 
 .card-content {

@@ -38,6 +38,7 @@
 						@touchstart="onItemTouchStart"
 						@touchmove="onItemTouchMove"
 						@touchend="onItemTouchEnd($event, item)"
+						@click="onItemClick(item)"
 					>
 						<text class="etf-popup-item-code">{{ item.code }}</text>
 						<text class="etf-popup-item-name">{{ item.name || '' }}</text>
@@ -68,6 +69,8 @@ const keyword = ref('')
 const kbHeight = ref(0)
 const touchStartPos = { x: 0, y: 0, moved: false }
 const TAP_SLOP = 10
+// 移动端 touchend 之后浏览器会再补发一次 click（约 300ms 内）；用此时间戳挡住重复触发
+let lastTouchPickAt = 0
 
 const filtered = computed(() => {
 	const kw = keyword.value.trim().toLowerCase()
@@ -131,6 +134,13 @@ function onItemTouchMove(e) {
 
 function onItemTouchEnd(e, item) {
 	if (touchStartPos.moved) return
+	pick(item)
+	lastTouchPickAt = Date.now()
+}
+
+// 桌面浏览器入口：鼠标 click 才会走到这里。移动端 touchend 后浏览器补发的 click 用时间戳挡住。
+function onItemClick(item) {
+	if (Date.now() - lastTouchPickAt < 500) return
 	pick(item)
 }
 
