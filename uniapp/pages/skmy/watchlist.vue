@@ -11,8 +11,8 @@
 					<uni-tr v-for="item in tableData" :key="item.skId" @click="handleRowClick(item)">
 						<uni-td align="center">{{ item.skId }}</uni-td>
 						<uni-td>{{ item.skName }}</uni-td>
-						<uni-td align="center">
-							<button size="mini" type="default"
+						<uni-td class="follow-cell" align="center">
+							<button class="follow-button" size="mini" type="default"
 								:loading="pendingCodes.has(item.skId)"
 								:disabled="loading || pendingCodes.has(item.skId)"
 								@click.stop="unfollow(item.skId)">取消关注</button>
@@ -100,5 +100,10 @@ const handleRowClick = (item) => {
 <style scoped>
 .watchlist-table :deep(.uni-table) {
 	table-layout: fixed;
+}
+
+.follow-cell,
+.follow-button {
+	vertical-align: middle;
 }
 </style>

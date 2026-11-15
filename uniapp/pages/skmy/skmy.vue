@@ -31,16 +31,6 @@
 
 		<!-- 功能入口（仅登录后展示） -->
 		<view v-if="isLoggedIn" class="menu-section">
-			<view class="menu-card" @click="goWatchlist">
-				<view class="menu-icon-wrap icon-bg-amber">
-					<text class="menu-icon">&#9733;</text>
-				</view>
-				<view class="menu-content">
-					<text class="menu-title">我的关注</text>
-					<text class="menu-desc">查看自选股列表，点击可查看股票详情</text>
-				</view>
-				<text class="menu-arrow">></text>
-			</view>
 			<view class="menu-card" @click="goSubscriptions">
 				<view class="menu-icon-wrap icon-bg-green">
 					<text class="menu-icon">&#9993;</text>
@@ -48,6 +38,16 @@
 				<view class="menu-content">
 					<text class="menu-title">我的订阅</text>
 					<text class="menu-desc">查看已订阅的策略推送，管理订阅参数</text>
+				</view>
+				<text class="menu-arrow">></text>
+			</view>
+			<view class="menu-card" @click="goWatchlist">
+				<view class="menu-icon-wrap icon-bg-amber">
+					<text class="menu-icon">&#9733;</text>
+				</view>
+				<view class="menu-content">
+					<text class="menu-title">我的关注</text>
+					<text class="menu-desc">查看自选股列表，点击可查看股票详情</text>
 				</view>
 				<text class="menu-arrow">></text>
 			</view>

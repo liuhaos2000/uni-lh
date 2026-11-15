@@ -11,8 +11,8 @@
 				<uni-tr v-for="item in tableData" :key="item.dm" @click="handleRowClick(item)">
 					<uni-td align="center">{{ item.dm }}</uni-td>
 					<uni-td>{{ item.mc }}</uni-td>
-					<uni-td align="center">
-						<button size="mini"
+					<uni-td class="follow-cell" align="center">
+						<button class="follow-button" size="mini"
 							:type="followedCodes.has(stockKey(item.dm)) ? 'default' : 'primary'"
 							:loading="pendingCodes.has(stockKey(item.dm))"
 							:disabled="loadingWatchlist || pendingCodes.has(stockKey(item.dm))"
@@ -146,5 +146,10 @@
 
 	.search-results :deep(.uni-table) {
 		table-layout: fixed;
+	}
+
+	.follow-cell,
+	.follow-button {
+		vertical-align: middle;
 	}
 </style>
