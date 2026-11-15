@@ -9,6 +9,7 @@ import re
 import logging
 
 from django.contrib.auth import authenticate
+from django.core.cache import cache
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
@@ -16,7 +17,7 @@ from rest_framework import status
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from ..models.users2 import User2
-from ..utils.captcha import generate_captcha, verify_captcha
+from ..utils.captcha import CAPTCHA_TTL, generate_captcha, verify_captcha
 from ..utils.email_code import (
     issue_code,
     verify_code,
@@ -89,7 +90,7 @@ def send_email_code(request):
         return _err('purpose 非法')
     if not EMAIL_RE.match(email):
         return _err('邮箱格式不正确')
-    if not verify_captcha(captcha_id, captcha_text):
+    if not verify_captcha(captcha_id, captcha_text, consume=purpose != 'register'):
         return _err('图形验证码错误或已过期', code=4101)
 
     # 注册场景：邮箱不能已存在；找回场景：必须存在
@@ -102,6 +103,10 @@ def send_email_code(request):
     wait = can_send(email)
     if wait:
         return _err(f'请 {wait} 秒后再试', code=4102, http=status.HTTP_429_TOO_MANY_REQUESTS)
+
+    # Keep the captcha valid for registration while allowing one email per captcha.
+    if purpose == 'register' and not cache.add(f'captcha:register-email:{captcha_id}', True, CAPTCHA_TTL):
+        return _err('图形验证码已用于发送邮件，请刷新后重试', code=4101)
 
     try:
         issue_code(email, purpose=purpose)
