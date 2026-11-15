@@ -9,7 +9,7 @@ from .views.userView import get_user_first_stock, get_user_subscriptions
 from .views.skView import get_sk_k
 from .views.skView import get_huice
 from .views.skView import addToWatchlist
-from .views.skView import removeFromWatchlist
+from .views.skView import get_watchlist_codes, removeFromWatchlist
 from .views.momentumView import (
     momentum_backtest, momentum_optimize, etf_name_lookup,
     momentum_subscriptions, momentum_subscription_detail, momentum_subscription_notify,
@@ -28,6 +28,7 @@ urlpatterns = [
     path('sk/strategies/', list_strategies),
     path('sk/getskk/', get_sk_k),
     path('sk/gethuice/', get_huice),
+    path('sk/watchlist/', get_watchlist_codes),
     path('sk/add/', addToWatchlist),
     path('sk/remove/', removeFromWatchlist),
 

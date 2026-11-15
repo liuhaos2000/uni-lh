@@ -126,6 +126,17 @@ def fetch_and_convert_data(skId, ktype='d'):
 
 
 
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_watchlist_codes(request):
+    watchlist = Watchlist.objects.filter(openid=str(request.user.id)).first()
+    codes = []
+    if watchlist:
+        codes = list(WatchlistStock.objects.filter(watchlist=watchlist)
+                     .values_list('stock_code', flat=True))
+    return Response({"code": 0, "data": codes})
+
+
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def addToWatchlist(request):

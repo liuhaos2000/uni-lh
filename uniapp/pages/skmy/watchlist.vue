@@ -1,20 +1,22 @@
 <template>
 	<view class="uni-container">
 		<view style="padding: 10px 0 10px 0;">
-			<view class="uni-container">
-				<uni-table ref="table" :loading="loading" border stripe emptyText="暂无更多数据">
+			<view class="uni-container watchlist-table">
+				<uni-table :loading="loading" border stripe emptyText="暂无关注">
 					<uni-tr>
-						<uni-th width="80" align="center">代碼</uni-th>
-						<uni-th width="80" align="center">名稱</uni-th>
-						<uni-th width="20" align="center">價格</uni-th>
-						<uni-th width="20" align="center">漲跌</uni-th>
+						<uni-th width="96" align="center">代碼</uni-th>
+						<uni-th align="left">名稱</uni-th>
+						<uni-th width="112" align="center">关注</uni-th>
 					</uni-tr>
-					<uni-tr v-for="(item, index) in tableData" :key="index" @click="handleRowClick(item)"
-						:class="{ 'positive-movement': item.movement > 0, 'negative-movement': item.movement < 0 }">
-						<uni-td>{{ item.skId }}</uni-td>
+					<uni-tr v-for="item in tableData" :key="item.skId" @click="handleRowClick(item)">
+						<uni-td align="center">{{ item.skId }}</uni-td>
 						<uni-td>{{ item.skName }}</uni-td>
-						<uni-td align="right">{{ item.price }}</uni-td>
-						<uni-td align="right">{{ item.movement }}</uni-td>
+						<uni-td align="center">
+							<button size="mini" type="default"
+								:loading="pendingCodes.has(item.skId)"
+								:disabled="loading || pendingCodes.has(item.skId)"
+								@click.stop="unfollow(item.skId)">取消关注</button>
+						</uni-td>
 					</uni-tr>
 				</uni-table>
 			</view>
@@ -23,34 +25,68 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
-import getMy from '@/services/sk/getMy.js'
+import getStrategy2 from '@/services/sk/getStrategy2.js'
+import { getWatchlistCodes, removeFromWatchlist } from '@/services/sk/watchlist.js'
 import uniTable from '@dcloudio/uni-ui/lib/uni-table/uni-table.vue'
 import uniTr from '@dcloudio/uni-ui/lib/uni-tr/uni-tr.vue'
 import uniTh from '@dcloudio/uni-ui/lib/uni-th/uni-th.vue'
 import uniTd from '@dcloudio/uni-ui/lib/uni-td/uni-td.vue'
 
 const loading = ref(false)
-const tableData = ref([])
+const stockCodes = ref([])
+const stockNames = ref(new Map())
+const pendingCodes = ref(new Set())
 
-const loadTableData = async () => {
+const tableData = computed(() => stockCodes.value.map(skId => ({
+	skId,
+	skName: stockNames.value.get(skId.slice(0, 6)) || skId,
+})))
+
+onMounted(async () => {
 	try {
-		loading.value = true
-		const result = await getMy()
-		if (result && result.code === 0 && result.data) {
-			tableData.value = result.data.userSkList || []
+		const result = await getStrategy2()
+		stockNames.value = new Map((result?.allnames || []).map(({ dm, mc }) => [dm.slice(0, 6), mc]))
+	} catch (error) {
+		console.error('股票名称加载失败', error)
+	}
+})
+
+onShow(async () => {
+	if (loading.value || pendingCodes.value.size) return
+	loading.value = true
+	try {
+		const result = await getWatchlistCodes()
+		if (result?.code !== 0) throw new Error('关注列表加载失败')
+		stockCodes.value = [...new Set(result.data)]
+	} catch (error) {
+		if (error?.code !== 401) {
+			uni.showToast({ title: '关注列表加载失败', icon: 'none' })
 		}
-	} catch (e) {
-		console.error('表格数据加载失败', e)
 	} finally {
 		loading.value = false
 	}
-}
-
-onShow(async () => {
-	await loadTableData()
 })
+
+const unfollow = async (stockCode) => {
+	if (loading.value || pendingCodes.value.has(stockCode)) return
+	pendingCodes.value.add(stockCode)
+	try {
+		const result = await removeFromWatchlist(stockCode)
+		if (result?.code !== 0 && result?.message !== 'stock_not_found' && result?.message !== 'watchlist_not_found') {
+			throw new Error('取消关注失败')
+		}
+		stockCodes.value = stockCodes.value.filter(code => code !== stockCode)
+		uni.showToast({ title: '已取消关注', icon: 'success' })
+	} catch (error) {
+		if (error?.code !== 401) {
+			uni.showToast({ title: '取消关注失败', icon: 'none' })
+		}
+	} finally {
+		pendingCodes.value.delete(stockCode)
+	}
+}
 
 const handleRowClick = (item) => {
 	uni.navigateTo({
@@ -61,17 +97,8 @@ const handleRowClick = (item) => {
 }
 </script>
 
-<style>
-.positive-movement {
-	color: #D90214;
-}
-.negative-movement {
-	color: #54ac54;
-}
-.positive-movement td {
-	color: inherit !important;
-}
-.negative-movement td {
-	color: inherit !important;
+<style scoped>
+.watchlist-table :deep(.uni-table) {
+	table-layout: fixed;
 }
 </style>
